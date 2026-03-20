@@ -13,7 +13,7 @@ function ThemeSwitcher({ compact = false }) {
             key={theme.id}
             className={`theme-btn ${currentThemeId === theme.id ? 'active' : ''}`}
             onClick={() => setTheme(theme.id)}
-            whileHover={{ scale: compact ? 1.15 : 1.1 }}
+            whileHover={{ scale: compact ? 1.05 : 1.03 }}
             whileTap={{ scale: 0.95 }}
             title={`切换为${theme.name}风格`}
             aria-label={`切换为${theme.name}主题`}

@@ -213,7 +213,7 @@ function App() {
                       key={tab.id}
                       className={`tab ${activeTab === tab.id ? 'active' : ''}`}
                       onClick={() => setActiveTab(tab.id)}
-                      whileHover={{ scale: 1.05 }}
+                      whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.95 }}
                     >
                       {tab.icon} {tab.name}

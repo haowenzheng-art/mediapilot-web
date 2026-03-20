@@ -13,7 +13,7 @@
   --card-bg: rgba(15, 32, 39, 0.8);
   --glass-bg: rgba(0, 238, 255, 0.1);
   --glass-blur: 10px;
-  --button-hover: translateY(-5px);
+  --button-hover: translateY(-2px);
   --shadow-color: rgba(0, 238, 255, 0.3);
 }
 
