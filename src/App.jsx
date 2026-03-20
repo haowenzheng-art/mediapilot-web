@@ -148,9 +148,9 @@ function App() {
                 </div>
 
                 <h1 className="hero-title">
-                  <span className="hero-title-cn">创新改变世界</span>
+                  <span className="hero-title-cn">在AI的时代，营销自己是最重要的能力</span>
                   <span className="hero-title-divider">|</span>
-                  <span className="hero-title-en">Innovation Changes the World</span>
+                  <span className="hero-title-en">In the age of AI, marketing yourself is the most important skill</span>
                 </h1>
                 <p className="hero-subtitle">
                   MediaPilot —— 让每个人都能打造个人IP
@@ -167,12 +167,10 @@ function App() {
                       key={idx}
                       className="feature-card card"
                       whileHover={{
-                        scale: 1.05,
-                        rotateX: 5,
-                        rotateY: 5,
-                        boxShadow: '0 25px 50px rgba(0,0,0,0.25)',
+                        scale: 1.02,
+                        y: -5,
                       }}
-                      transition={{ type: 'spring', stiffness: 300 }}
+                      transition={{ type: 'spring', stiffness: 400, damping: 20 }}
                       onClick={() => handleFeatureClick(feature.tab)}
                     >
                       <span className="feature-icon">{feature.icon}</span>
