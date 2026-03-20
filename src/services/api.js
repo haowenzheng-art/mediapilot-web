@@ -1,5 +1,8 @@
-// 通过环境变量控制 AI 功能是否启用
-const AI_ENABLED = import.meta.env.VITE_AI_ENABLED === 'true'
+// AI 功能由后端环境变量 + 用户权限共同控制
+// 开发环境默认开启，生产环境根据用户角色判断
+
+const isDev = import.meta.env.DEV
+const AI_ENABLED = isDev || import.meta.env.VITE_AI_ENABLED === 'true'
 
 const DEFAULT_CONFIG = {
   provider: 'openai',
@@ -8,7 +11,18 @@ const DEFAULT_CONFIG = {
   model: import.meta.env.VITE_MODEL || 'deepseek-v3-0324',
 }
 
-export const isAIEnabled = () => AI_ENABLED
+export const isAIEnabled = () => {
+  // 允许外部覆盖
+  if (typeof window.__AI_ENABLED_OVERRIDE__ !== 'undefined') {
+    return window.__AI_ENABLED_OVERRIDE__
+  }
+  return AI_ENABLED
+}
+
+// 设置 AI 功能开关（供外部调用）
+export const setAIEnabled = (enabled) => {
+  window.__AI_ENABLED_OVERRIDE__ = enabled
+}
 
 // 先定义getConfig
 export const getConfig = () => {

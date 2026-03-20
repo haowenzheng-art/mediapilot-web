@@ -7,6 +7,7 @@ import DynamicBackground from './components/DynamicBackground'
 import ThemeSwitcher from './components/ThemeSwitcher'
 import AIChat from './components/AIChat'
 import Footer from './components/Footer'
+import LoginPage from './pages/LoginPage'
 import ScriptPage from './pages/ScriptPage'
 import SettingsPage from './pages/SettingsPage'
 import HotSearchPage from './pages/HotSearchPage'
@@ -16,6 +17,7 @@ import TemplatesPage from './pages/TemplatesPage'
 import TranscriptionPage from './pages/TranscriptionPage'
 import AnalyticsPage from './pages/AnalyticsPage'
 import HistoryPage from './pages/HistoryPage'
+import { getCurrentUser, logout, isAdmin } from './services/auth'
 
 const TABS = [
   { id: 'trending', name: '热点搜索', icon: '🔥' },
@@ -33,10 +35,14 @@ function App() {
   const { currentThemeId } = useTheme()
   const [activeTab, setActiveTab] = useState('script')
   const [isHeroPage, setIsHeroPage] = useState(true)
+  const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
   const heroRef = useRef(null)
   const contentRef = useRef(null)
   const isScrolling = useRef(false)
   const lastScrollTop = useRef(0)
+
+  // 根据用户角色决定是否启用 AI
+  const aiEnabled = currentUser && currentUser.isAdmin
 
   useEffect(() => {
     let wheelTimeout = null
@@ -113,6 +119,35 @@ function App() {
 
   const scrollToHero = () => {
     setIsHeroPage(true)
+  }
+
+  const handleLogin = (user) => {
+    setCurrentUser(user)
+    // 管理员开启 AI，其他用户关闭
+    if (user.isAdmin) {
+      import('./services/api').then(({ setAIEnabled }) => {
+        setAIEnabled(true)
+      })
+    }
+  }
+
+  const handleLogout = () => {
+    logout()
+    setCurrentUser(null)
+    // 重置 AI 状态
+    import('./services/api').then(({ setAIEnabled }) => {
+      setAIEnabled(false)
+    })
+  }
+
+  // 未登录，显示登录页面
+  if (!currentUser) {
+    return (
+      <div className={`app ${currentThemeId}-theme`} data-theme={currentThemeId}>
+        <DynamicBackground />
+        <LoginPage onLogin={handleLogin} />
+      </div>
+    )
   }
 
   return (
@@ -202,6 +237,26 @@ function App() {
                     <span className="logo-icon">🚀</span>
                     <h1 className="logo-text">MediaPilot</h1>
                     <span className="badge">WEB EDITION</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
+                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                      {currentUser.name}
+                      {currentUser.isAdmin && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'var(--accent-primary)', color: 'var(--bg-primary)', borderRadius: '4px', fontSize: '0.75rem' }}>管理员</span>}
+                    </span>
+                    <button
+                      onClick={handleLogout}
+                      style={{
+                        padding: '6px 12px',
+                        background: 'transparent',
+                        border: '1px solid var(--border-color)',
+                        borderRadius: '6px',
+                        color: 'var(--text-secondary)',
+                        cursor: 'pointer',
+                        fontSize: '0.85rem'
+                      }}
+                    >
+                      退出
+                    </button>
                   </div>
                 </div>
               </header>
