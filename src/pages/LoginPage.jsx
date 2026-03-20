@@ -1,12 +1,10 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { login } from '../services/auth'
 
 function LoginPage({ onLogin }) {
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
-  const navigate = useNavigate()
 
   const handleSubmit = (e) => {
     e.preventDefault()
@@ -15,7 +13,6 @@ function LoginPage({ onLogin }) {
     const result = login(username, password)
     if (result.success) {
       onLogin(result.user)
-      navigate('/')
     } else {
       setError(result.error)
     }
