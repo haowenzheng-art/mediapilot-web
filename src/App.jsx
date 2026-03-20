@@ -36,6 +36,7 @@ function App() {
   const [activeTab, setActiveTab] = useState('script')
   const [isHeroPage, setIsHeroPage] = useState(true)
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
+  const [showLoginModal, setShowLoginModal] = useState(false)
   const heroRef = useRef(null)
   const contentRef = useRef(null)
   const isScrolling = useRef(false)
@@ -140,15 +141,8 @@ function App() {
     })
   }
 
-  // 未登录，显示登录页面
-  if (!currentUser) {
-    return (
-      <div className={`app ${currentThemeId}-theme`} data-theme={currentThemeId}>
-        <DynamicBackground />
-        <LoginPage onLogin={handleLogin} />
-      </div>
-    )
-  }
+  // 未登录时也显示主页（带登录按钮）
+  const showLoginModal = !currentUser
 
   return (
     <div className={`app ${currentThemeId}-theme`} data-theme={currentThemeId}>
@@ -178,8 +172,42 @@ function App() {
                   <span className="hero-badge">WEB EDITION</span>
                 </div>
 
-                <div className="hero-theme-switcher">
+                <div className="hero-theme-switcher" style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
                   <ThemeSwitcher />
+                  {!currentUser && (
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button
+                        onClick={() => setShowLoginModal(true)}
+                        style={{
+                          padding: '8px 20px',
+                          background: 'transparent',
+                          border: '1px solid rgba(255,255,255,0.4)',
+                          borderRadius: '6px',
+                          color: 'white',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          fontWeight: '500'
+                        }}
+                      >
+                        Sign In
+                      </button>
+                      <button
+                        onClick={() => setShowLoginModal(true)}
+                        style={{
+                          padding: '8px 20px',
+                          background: 'var(--accent-primary)',
+                          border: 'none',
+                          borderRadius: '6px',
+                          color: 'var(--bg-primary)',
+                          cursor: 'pointer',
+                          fontSize: '0.9rem',
+                          fontWeight: '600'
+                        }}
+                      >
+                        Sign Up
+                      </button>
+                    </div>
+                  )}
                 </div>
 
                 <h1 className="hero-title">
@@ -239,24 +267,61 @@ function App() {
                     <span className="badge">WEB EDITION</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '15px' }}>
-                    <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
-                      {currentUser.name}
-                      {currentUser.isAdmin && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'var(--accent-primary)', color: 'var(--bg-primary)', borderRadius: '4px', fontSize: '0.75rem' }}>管理员</span>}
-                    </span>
-                    <button
-                      onClick={handleLogout}
-                      style={{
-                        padding: '6px 12px',
-                        background: 'transparent',
-                        border: '1px solid var(--border-color)',
-                        borderRadius: '6px',
-                        color: 'var(--text-secondary)',
-                        cursor: 'pointer',
-                        fontSize: '0.85rem'
-                      }}
-                    >
-                      退出
-                    </button>
+                    {currentUser ? (
+                      <>
+                        <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
+                          {currentUser.name}
+                          {currentUser.isAdmin && <span style={{ marginLeft: '8px', padding: '2px 8px', background: 'var(--accent-primary)', color: 'var(--bg-primary)', borderRadius: '4px', fontSize: '0.75rem' }}>管理员</span>}
+                        </span>
+                        <button
+                          onClick={handleLogout}
+                          style={{
+                            padding: '6px 12px',
+                            background: 'transparent',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            color: 'var(--text-secondary)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem'
+                          }}
+                        >
+                          Log Out
+                        </button>
+                      </>
+                    ) : (
+                      <div style={{ display: 'flex', gap: '8px' }}>
+                        <button
+                          onClick={() => setShowLoginModal(true)}
+                          style={{
+                            padding: '6px 16px',
+                            background: 'transparent',
+                            border: '1px solid var(--border-color)',
+                            borderRadius: '6px',
+                            color: 'var(--text-primary)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '500'
+                          }}
+                        >
+                          Sign In
+                        </button>
+                        <button
+                          onClick={() => setShowLoginModal(true)}
+                          style={{
+                            padding: '6px 16px',
+                            background: 'var(--accent-primary)',
+                            border: 'none',
+                            borderRadius: '6px',
+                            color: 'var(--bg-primary)',
+                            cursor: 'pointer',
+                            fontSize: '0.85rem',
+                            fontWeight: '600'
+                          }}
+                        >
+                          Sign Up
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </header>
@@ -330,6 +395,53 @@ function App() {
           )}
         </AnimatePresence>
       </motion.div>
+
+      {/* 登录弹窗 */}
+      <AnimatePresence>
+        {showLoginModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            style={{
+              position: 'fixed',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'rgba(0,0,0,0.7)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              zIndex: 1000
+            }}
+            onClick={() => setShowLoginModal(false)}
+          >
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              onClick={(e) => e.stopPropagation()}
+              style={{
+                background: 'var(--bg-secondary)',
+                borderRadius: '12px',
+                padding: '32px',
+                maxWidth: '400px',
+                width: '90%',
+                border: '1px solid var(--border-color)'
+              }}
+            >
+              <LoginPage
+                onLogin={(user) => {
+                  handleLogin(user)
+                  setShowLoginModal(false)
+                }}
+                onClose={() => setShowLoginModal(false)}
+              />
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <AIChat />
     </div>

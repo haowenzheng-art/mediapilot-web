@@ -29,6 +29,23 @@ export const getCurrentUser = () => {
   return null
 }
 
+// 注册（添加到 USERS）
+export const register = (username, password) => {
+  if (!username || !password) {
+    return { success: false, error: '用户名和密码不能为空' }
+  }
+  if (USERS[username]) {
+    return { success: false, error: '用户名已存在' }
+  }
+  // 新注册的用户默认是普通用户（不是管理员，不能用 AI）
+  USERS[username] = {
+    password,
+    role: 'user',
+    name: username
+  }
+  return { success: true }
+}
+
 // 登录
 export const login = (username, password) => {
   const user = USERS[username]
@@ -42,7 +59,7 @@ export const login = (username, password) => {
     localStorage.setItem('mediapilot-user', JSON.stringify(userData))
     return { success: true, user: userData }
   }
-  return { success: false, error: '用户名或密码错误' }
+  return { success: false, error: 'Invalid username or password' }
 }
 
 // 登出
