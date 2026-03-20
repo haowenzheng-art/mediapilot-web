@@ -141,9 +141,6 @@ function App() {
     })
   }
 
-  // 未登录时也显示主页（带登录按钮）
-  const showLoginModal = !currentUser
-
   return (
     <div className={`app ${currentThemeId}-theme`} data-theme={currentThemeId}>
       <DynamicBackground />
