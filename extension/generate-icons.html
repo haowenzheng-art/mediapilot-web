@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>生成插件图标</title>
+  <style>
+    body {
+      font-family: system-ui, sans-serif;
+      max-width: 600px;
+      margin: 50px auto;
+      padding: 20px;
+      background: #0f172a;
+      color: #e2e8f0;
+    }
+    h1 { color: #3b82f6; }
+    .step {
+      background: #1e293b;
+      padding: 20px;
+      border-radius: 8px;
+      margin: 20px 0;
+    }
+    code {
+      background: #334155;
+      padding: 4px 8px;
+      border-radius: 4px;
+      font-family: monospace;
+    }
+    button {
+      background: #3b82f6;
+      color: white;
+      border: none;
+      padding: 12px 24px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-size: 16px;
+      margin-top: 10px;
+    }
+    button:hover { background: #2563eb; }
+    canvas { display: none; }
+  </style>
+</head>
+<body>
+  <h1>🎨 生成 MediaPilot 插件图标</h1>
+
+  <div class="step">
+    <h2>步骤 1</h2>
+    <p>点击下方按钮生成图标，然后右键保存图片：</p>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+
+    <div style="display: flex; gap: 10px; margin-top: 20px;">
+      <div>
+        <button onclick="downloadIcon(16)">下载 16x16</button>
+      </div>
+      <div>
+        <button onclick="downloadIcon(48)">下载 48x48</button>
+      </div>
+      <div>
+        <button onclick="downloadIcon(128)">下载 128x128</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="step">
+    <h2>步骤 2</h2>
+    <p>将下载的三个文件重命名为：</p>
+    <ul>
+      <li><code>icon16.png</code></li>
+      <li><code>icon48.png</code></li>
+      <li><code>icon128.png</code></li>
+    </ul>
+  </div>
+
+  <div class="step">
+    <h2>步骤 3</h2>
+    <p>将这三个文件放到 <code>extension</code> 目录下</p>
+  </div>
+
+  <script>
+    function drawIcon(size) {
+      const canvas = document.getElementById(`canvas${size}`)
+      const ctx = canvas.getContext('2d')
+
+      // 绘制渐变背景
+      const gradient = ctx.createLinearGradient(0, 0, size, size)
+      gradient.addColorStop(0, '#3b82f6')
+      gradient.addColorStop(1, '#1e40af')
+
+      ctx.fillStyle = gradient
+      ctx.beginPath()
+      ctx.roundRect(0, 0, size, size, size * 0.2)
+      ctx.fill()
+
+      // 绘制火箭
+      ctx.fillStyle = 'white'
+      ctx.font = `${size * 0.5}px Arial`
+      ctx.textAlign = 'center'
+      ctx.textBaseline = 'middle'
+      ctx.fillText('🚀', size / 2, size / 2 + size * 0.05)
+
+      return canvas
+    }
+
+    function downloadIcon(size) {
+      const canvas = drawIcon(size)
+      const link = document.createElement('a')
+      link.download = `icon${size}.png`
+      link.href = canvas.toDataURL('image/png')
+      link.click()
+    }
+
+    // 预生成图标
+    drawIcon(16)
+    drawIcon(48)
+    drawIcon(128)
+  </script>
+</body>
+</html>

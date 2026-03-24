@@ -1,0 +1,38 @@
+{
+  "manifest_version": 3,
+  "name": "MediaPilot 数据监控",
+  "version": "1.0.0",
+  "description": "自动抓取小红书、抖音等平台数据，同步到 MediaPilot",
+  "icons": {
+    "16": "icon16.png",
+    "48": "icon48.png",
+    "128": "icon128.png"
+  },
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "http://localhost:*/*",
+    "http://127.0.0.1:*/*",
+    "https://*.xiaohongshu.com/*",
+    "https://*.douyin.com/*"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icon16.png",
+      "48": "icon48.png",
+      "128": "icon128.png"
+    }
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://*.xiaohongshu.com/*",
+        "https://*.douyin.com/*"
+      ],
+      "js": ["content.js"]
+    }
+  ]
+}

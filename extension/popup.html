@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MediaPilot 数据监控</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="container">
+    <div class="header">
+      <div class="logo">
+        <span class="logo-icon">🚀</span>
+        <span class="logo-text">MediaPilot</span>
+      </div>
+      <span class="status-badge" id="status">未连接</span>
+    </div>
+
+    <div class="content">
+      <!-- MediaPilot 网站配置 -->
+      <div class="section">
+        <div class="section-title">📡 MediaPilot 配置</div>
+        <div class="form-group">
+          <label class="label">网站地址</label>
+          <input
+            type="text"
+            id="mediaPilotUrl"
+            class="input"
+            placeholder="http://localhost:5173"
+          />
+        </div>
+        <div class="form-group">
+          <label class="label">用户 Token（可选）</label>
+          <input
+            type="password"
+            id="userToken"
+            class="input"
+            placeholder="留空则使用本地存储"
+          />
+        </div>
+        <button id="connectBtn" class="btn btn-primary">连接 MediaPilot</button>
+      </div>
+
+      <!-- 当前页面数据 -->
+      <div class="section">
+        <div class="section-title">📊 当前页面数据</div>
+        <div class="data-preview" id="dataPreview">
+          <div class="empty-state">
+            <div class="empty-icon">📋</div>
+            <p>访问小红书创作者中心或笔记页面</p>
+          </div>
+        </div>
+      </div>
+
+      <!-- 操作按钮 -->
+      <div class="actions">
+        <button id="captureBtn" class="btn btn-success" disabled>
+          📸 抓取当前数据
+        </button>
+        <button id="sendBtn" class="btn btn-primary" disabled>
+          📤 同步到 MediaPilot
+        </button>
+      </div>
+
+      <!-- 最近抓取记录 -->
+      <div class="section">
+        <div class="section-title">📜 最近记录</div>
+        <div class="history" id="history">
+          <div class="empty-history">
+            <p class="text-sm text-secondary">暂无抓取记录</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 链接提示 -->
+    <div class="footer">
+      <a href="https://vercel.app" target="_blank" class="link-text">
+        访问 MediaPilot →
+      </a>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
