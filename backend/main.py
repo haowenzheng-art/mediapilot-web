@@ -1,4 +1,3 @@
-
 """
 MediaPilot 后端API服务入口
 """
@@ -10,8 +9,14 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 
-from shared.config import settings
-from backend.api.routes import router
+# 导导配置（向后兼容：优先使用新路径，如果不存在则使用旧路径）
+try:
+    from backend.config.settings import settings
+except ImportError:
+    from shared.config import settings
+
+# 导导路由注册函数
+from backend.api import register_routes
 
 app = FastAPI(
     title=settings.API_TITLE,
@@ -28,7 +33,7 @@ app.add_middleware(
 )
 
 # 注册路由
-app.include_router(router)
+register_routes(app)
 
 
 @app.get("/")
@@ -54,4 +59,3 @@ if __name__ == "__main__":
         port=settings.API_PORT,
         reload=True
     )
-
