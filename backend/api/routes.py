@@ -259,7 +259,7 @@ async def get_media_result(task_id: str):
 async def configure_ai(provider: str, api_key: str, base_url: str = None, model: str = None):
     """配置AI服务"""
     try:
-        ai_manager.configure_service(provider, api_key, base_url, model)
+        ai_manager.configure(provider, api_key, base_url, model)
         return APIResponse(message="AI服务配置成功")
     except Exception as e:
         return APIResponse(success=False, message=str(e))

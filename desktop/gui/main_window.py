@@ -62,7 +62,7 @@ class ApiKeyDialog(QDialog):
         form_layout.addRow("API类型:", self.api_type_combo)
 
         self.base_url_edit = QLineEdit()
-        self.base_url_edit.setPlaceholderText("https://ark.cn-beijing.volces.com/api/v3")
+        self.base_url_edit.setPlaceholderText("https://apihub.agnes-ai.com/v1")
         form_layout.addRow("Base URL:", self.base_url_edit)
 
         self.api_key_edit = QLineEdit()
@@ -71,7 +71,7 @@ class ApiKeyDialog(QDialog):
         form_layout.addRow("API Key:", self.api_key_edit)
 
         self.model_edit = QLineEdit()
-        self.model_edit.setPlaceholderText("例如: doubao-seed-2-0-pro-260215")
+        self.model_edit.setPlaceholderText("例如: agnes-2.0-flash")
         form_layout.addRow("模型名称:", self.model_edit)
 
         layout.addLayout(form_layout)

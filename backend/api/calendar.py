@@ -1,39 +1,30 @@
 """
 日历 API 路由
 提供日历事件的 CRUD 接口
+使用统一响应格式和分页
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, project_root)
 
 from datetime import datetime
+from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
 
 from backend.config.database import get_db
 from backend.services.calendar_service import calendar_service
 from backend.models.domain.calendar import CalendarEventCreate, CalendarEventUpdate, CalendarEventResponse
 from backend.models.database.tables import UserTable
 from backend.api.dependencies import get_current_user
+from backend.utils.api_response import success_response, error_response, paginated_response
+from backend.models.schemas.api_response import ErrorCode
 
-# 创建路由
 router = APIRouter(prefix="/calendar", tags=["日历"])
 
 
-class EventListResponse(BaseModel):
-    """事件列表响应"""
-    events: list[CalendarEventResponse]
-    total: int
-
-
-class MessageResponse(BaseModel):
-    """消息响应"""
-    message: str
-    event_id: int | None = None
-
-
-@router.post("/events", response_model=CalendarEventResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/events", status_code=status.HTTP_201_CREATED)
 async def create_event(
     event_data: CalendarEventCreate,
     current_user: UserTable = Depends(get_current_user),
@@ -52,21 +43,24 @@ async def create_event(
     """
     try:
         event = calendar_service.create_event(db, current_user.id, event_data)
-        return event
-
+        return success_response(
+            data=event,
+            message="创建事件成功"
+        )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "validation_error", "message": str(e)}
+        return error_response(
+            code=ErrorCode.INVALID_INPUT,
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "server_error", "message": f"创建事件失败: {str(e)}"}
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"创建事件失败: {str(e)}"
         )
 
 
-@router.get("/events/{event_id}", response_model=CalendarEventResponse)
+@router.get("/events/{event_id}")
 async def get_event(
     event_id: int,
     current_user: UserTable = Depends(get_current_user),
@@ -80,62 +74,76 @@ async def get_event(
     event = calendar_service.get_event(db, current_user.id, event_id)
 
     if not event:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "事件不存在"}
+        return error_response(
+            code=ErrorCode.NOT_FOUND,
+            message="事件不存在",
+            status_code=status.HTTP_404_NOT_FOUND
         )
 
-    return event
+    return success_response(
+        data=event,
+        message="获取事件成功"
+    )
 
 
-@router.get("/events", response_model=EventListResponse)
+@router.get("/events")
 async def get_events(
     current_user: UserTable = Depends(get_current_user),
     db: Session = Depends(get_db),
-    start_date: str = Query(None, description="开始日期 (YYYY-MM-DD)"),
-    end_date: str = Query(None, description="结束日期 (YYYY-MM-DD)"),
-    status_filter: str = Query(None, alias="status", description="状态筛选")
+    start_date: Optional[str] = Query(None, description="开始日期 (YYYY-MM-DD)"),
+    end_date: Optional[str] = Query(None, description="结束日期 (YYYY-MM-DD)"),
+    status_filter: Optional[str] = Query(None, alias="status", description="状态筛选"),
+    page: Optional[int] = Query(1, ge=1, description="页码"),
+    per_page: Optional[int] = Query(20, ge=1, le=100, description="每页数量")
 ):
     """
-    获取用户的日历事件列表
+    获取用户的日历事件列表（支持分页）
 
     - start_date: 开始日期（可选）
     - end_date: 结束日期（可选）
     - status: 状态筛选（可选）
+    - page: 页码（默认值：1）
+    - per_page: 每页数量（默认值：20）
 
     需要认证，返回按计划日期排序的事件列表
     """
     try:
-        # 解析日期字符串
         start_dt = datetime.fromisoformat(start_date) if start_date else None
         end_dt = datetime.fromisoformat(end_date) if end_date else None
 
-        events = calendar_service.get_events(
+        validated_page = max(page or 1, 1)
+        validated_per_page = min(max(per_page or 20, 1), 100)
+
+        events, total = calendar_service.get_events(
             db,
             current_user.id,
             start_date=start_dt,
             end_date=end_dt,
-            status=status_filter
+            status=status_filter,
+            page=validated_page,
+            per_page=validated_per_page
         )
 
-        return EventListResponse(
-            events=events,
-            total=len(events)
+        return paginated_response(
+            data=events,
+            total=total,
+            page=validated_page,
+            per_page=validated_per_page
         )
-
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "invalid_date", "message": f"日期格式错误: {str(e)}"}
+        return error_response(
+            code=ErrorCode.INVALID_INPUT,
+            message=f"日期格式错误: {str(e)}",
+            status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "server_error", "message": f"获取事件列表失败: {str(e)}"}
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取事件列表失败: {str(e)}"
         )
 
 
-@router.put("/events/{event_id}", response_model=CalendarEventResponse)
+@router.put("/events/{event_id}")
 async def update_event(
     event_id: int,
     event_data: CalendarEventUpdate,
@@ -157,26 +165,30 @@ async def update_event(
         event = calendar_service.update_event(db, current_user.id, event_id, event_data)
 
         if not event:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail={"code": "not_found", "message": "事件不存在"}
+            return error_response(
+                code=ErrorCode.NOT_FOUND,
+                message="事件不存在",
+                status_code=status.HTTP_404_NOT_FOUND
             )
 
-        return event
-
+        return success_response(
+            data=event,
+            message="更新事件成功"
+        )
     except ValueError as e:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"code": "validation_error", "message": str(e)}
+        return error_response(
+            code=ErrorCode.INVALID_INPUT,
+            message=str(e),
+            status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "server_error", "message": f"更新事件失败: {str(e)}"}
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"更新事件失败: {str(e)}"
         )
 
 
-@router.delete("/events/{event_id}", response_model=MessageResponse)
+@router.delete("/events/{event_id}")
 async def delete_event(
     event_id: int,
     current_user: UserTable = Depends(get_current_user),
@@ -187,22 +199,32 @@ async def delete_event(
 
     需要认证
     """
-    success = calendar_service.delete_event(db, current_user.id, event_id)
+    try:
+        success = calendar_service.delete_event(db, current_user.id, event_id)
 
-    if not success:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"code": "not_found", "message": "事件不存在"}
+        if not success:
+            return error_response(
+                code=ErrorCode.NOT_FOUND,
+                message="事件不存在",
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+
+        return success_response(
+            data={"event_id": event_id},
+            message="删除事件成功"
+        )
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"删除事件失败: {str(e)}"
         )
 
-    return MessageResponse(message="事件已删除", event_id=event_id)
 
-
-@router.get("/events/upcoming", response_model=EventListResponse)
+@router.get("/events/upcoming")
 async def get_upcoming_events(
     current_user: UserTable = Depends(get_current_user),
     db: Session = Depends(get_db),
-    days: int = Query(7, ge=1, le=90, description="未来天数")
+    days: Optional[int] = Query(7, ge=1, le=90, description="未来天数")
 ):
     """
     获取未来指定天数内的日历事件
@@ -214,13 +236,12 @@ async def get_upcoming_events(
     try:
         events = calendar_service.get_upcoming_events(db, current_user.id, days)
 
-        return EventListResponse(
-            events=events,
-            total=len(events)
+        return success_response(
+            data=events,
+            message=f"获取即将到来事件成功"
         )
-
     except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"code": "server_error", "message": f"获取即将到来事件失败: {str(e)}"}
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取即将到来事件失败: {str(e)}"
         )

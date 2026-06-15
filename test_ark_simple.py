@@ -15,7 +15,7 @@ import requests
 
 # 配置
 api_key = "1a73929c-d549-43e8-b03f-0d6e3e979771"
-base_url = "https://ark.cn-beijing.volces.com/api/v3"
+base_url = "https://ark.cn-beijing.volces.com/api/coding"
 model = "ep-m-20260311150444-fn2zc"
 prompt = "你好，请简单介绍一下自己"
 

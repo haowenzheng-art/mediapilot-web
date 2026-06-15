@@ -1,0 +1,97 @@
+# MediaPilot Docker Compose 配置
+# 启动：docker-compose up -d
+# 停止：docker-compose down
+
+version: '3.8'
+
+services:
+  # ==================== 后端服务 ====================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: mediapilot-backend
+    restart: unless-stopped
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    environment:
+      - API_HOST=0.0.0.0
+      - API_PORT=8000
+      - DATABASE_URL=${DATABASE_URL:-sqlite:///./mediapilot.db}
+      # 认证
+      - JWT_SECRET=${JWT_SECRET:-default-secret-change-in-prod}
+      - DEFAULT_QUOTA=${DEFAULT_QUOTA:-100}
+      # 平台 API
+      - XINBANG_API_KEY=${XINBANG_API_KEY}
+      - HUITUN_API_KEY=${HUITUN_API_KEY}
+      # AI 配置
+      - AI_PROVIDER=${AI_PROVIDER:-openai}
+      - AI_API_KEY=${AI_API_KEY}
+      - AI_BASE_URL=${AI_BASE_URL:-https://apihub.agnes-ai.com/v1}
+      - AI_MODEL=${AI_MODEL:-agnes-2.0-flash}
+      - AI_TIMEOUT=${AI_TIMEOUT:-60}
+      - AI_MAX_RETRIES=${AI_MAX_RETRIES:-3}
+      # 转写引擎
+      - TRANSCRIBE_ENGINE=${TRANSCRIBE_ENGINE:-whisper_local}
+      - WHISPER_MODEL=${WHISPER_MODEL:-base}
+      - WHISPER_LANGUAGE=${WHISPER_LANGUAGE:-zh}
+      - ALIYUN_ACCESS_KEY_ID=${ALIYUN_ACCESS_KEY_ID}
+      - ALIYUN_ACCESS_KEY_SECRET=${ALIYUN_ACCESS_KEY_SECRET}
+      - ALIYUN_APP_KEY=${ALIYUN_APP_KEY}
+      - VOLCENGINE_ACCESS_KEY=${VOLCENGINE_ACCESS_KEY}
+      - VOLCENGINE_SECRET_ACCESS_KEY=${VOLCENGINE_SECRET_ACCESS_KEY}
+      - VOLCENGINE_APP_ID=${VOLCENGINE_APP_ID}
+      - USE_MOCK_TRANSCRIBE=${USE_MOCK_TRANSCRIBE:-false}
+      # 日志和 CORS
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      - CORS_ORIGINS=${CORS_ORIGINS:-http://localhost:80}
+    volumes:
+      - backend_uploads:/app/uploads
+      - backend_db:/app
+    networks:
+      - mediapilot-network
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # ==================== 前端服务 ====================
+  frontend:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: mediapilot-frontend
+    restart: unless-stopped
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+    environment:
+      - VITE_AI_ENABLED=${VITE_AI_ENABLED:-true}
+      - VITE_API_KEY=${VITE_API_KEY}
+      - VITE_BASE_URL=${VITE_BASE_URL}
+      - VITE_MODEL=${VITE_MODEL:-agnes-2.0-flash}
+      - VITE_API_BASE_URL=http://backend:8000
+    depends_on:
+      backend:
+        condition: service_healthy
+    networks:
+      - mediapilot-network
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+# ==================== 数据卷 ====================
+volumes:
+  backend_uploads:
+    driver: local
+  backend_db:
+    driver: local
+
+# ==================== 网络 ====================
+networks:
+  mediapilot-network:
+    driver: bridge

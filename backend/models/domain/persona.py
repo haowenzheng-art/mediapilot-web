@@ -1,0 +1,63 @@
+"""
+人设相关的领域模型
+定义请求和响应的Pydantic模型
+"""
+from pydantic import BaseModel, Field
+from typing import Optional
+from datetime import datetime
+
+
+class PersonaCreate(BaseModel):
+    """创建人设请求"""
+    persona_description: str = Field(..., min_length=1, max_length=500, description="人设描述")
+
+
+class PersonaResponse(BaseModel):
+    """人设响应"""
+    id: int
+    persona_description: str
+    last_used_at: datetime
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class CopywritingGenerateRequest(BaseModel):
+    """口播文案生成请求"""
+    mode: str = Field(..., pattern="^(from_zero|hotspot|rewrite)$", description="生成模式：from_zero(从0到1)/hotspot(热点框架)/rewrite(改写)")
+    persona: str = Field(..., min_length=1, max_length=500, description="人设描述")
+
+    # 从0到1模式
+    topic: Optional[str] = Field(None, description="话题（from_zero模式需要）")
+
+    # 热点框架模式
+    hotspot_content: Optional[str] = Field(None, description="热点内容（hotspot模式需要）")
+
+    # 改写模式
+    original_text: Optional[str] = Field(None, description="原文（rewrite模式需要）")
+
+    # 热点关联（用于内容库追踪）
+    hot_topic_id: Optional[str] = Field(None, description="关联的热点ID")
+    hot_topic_title: Optional[str] = Field(None, description="关联的热点标题")
+    hot_topic_source: Optional[str] = Field(None, description="关联的热点来源")
+
+
+class CopywritingRewriteRequest(BaseModel):
+    """文案改写请求"""
+    copywriting_id: str = Field(..., description="文案ID")
+    direction: str = Field(..., pattern="^(more_colloquial|add_emotion|add_opinion)$", description="改写方向")
+
+
+class CopywritingResponse(BaseModel):
+    """口播文案响应"""
+    id: str
+    title: str
+    hooks: list[str]
+    content: str
+    mode: str
+    persona: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True

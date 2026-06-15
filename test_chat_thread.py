@@ -15,7 +15,7 @@ print()
 config = {
     "provider": "ark",
     "api_key": "1a73929c-d549-43e8-b03f-0d6e3e979771",
-    "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+    "base_url": "https://ark.cn-beijing.volces.com/api/coding",
     "model": "ep-m-20260311150444-fn2zc"
 }
 
@@ -31,7 +31,7 @@ print()
 import requests
 
 api_key = config["api_key"]
-base_url = config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3")
+base_url = config.get("base_url", "https://ark.cn-beijing.volces.com/api/coding")
 model = config.get("model", "")
 provider = config.get("provider", "ark")
 user_text = "你好，请简单介绍一下自己"

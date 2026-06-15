@@ -227,7 +227,7 @@ class ChatThread(QThread):
                 return
 
             api_key = self.config["api_key"]
-            base_url = self.config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3")
+            base_url = self.config.get("base_url", "https://apihub.agnes-ai.com/v1")
             model = self.config.get("model", "")
             provider = self.config.get("provider", "openai")
 
@@ -321,7 +321,7 @@ class ScriptThread(QThread):
             import json
 
             api_key = self.config["api_key"]
-            base_url = self.config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3")
+            base_url = self.config.get("base_url", "https://apihub.agnes-ai.com/v1")
             model = self.config.get("model", "")
             provider = self.config.get("provider", "ark")
 
@@ -435,7 +435,7 @@ class TemplateThread(QThread):
             import json
 
             api_key = self.config["api_key"]
-            base_url = self.config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3")
+            base_url = self.config.get("base_url", "https://apihub.agnes-ai.com/v1")
             model = self.config.get("model", "")
             provider = self.config.get("provider", "ark")
 
@@ -550,8 +550,8 @@ class MediaPilotSpaceWindow(QMainWindow):
         return {
             "provider": "openai",
             "api_key": "1a73929c-d549-43e8-b03f-0d6e3e979771",
-            "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-            "model": "ep-m-20260311150444-fn2zc"
+            "base_url": "https://apihub.agnes-ai.com/v1",
+            "model": "agnes-2.0-flash"
         }
 
     def save_config(self):
@@ -2121,12 +2121,12 @@ class MediaPilotSpaceWindow(QMainWindow):
         help_content = """【预设配置说明】
 
 • Doubao (火山方舟-原生API)
-  Base URL: https://ark.cn-beijing.volces.com/api/v3
-  Model: 请输入接入点ID (格式: ep-xxxxx)
+  Base URL: https://apihub.agnes-ai.com/v1
+  Model: agnes-2.0-flash
 
 • Doubao (火山方舟-OpenAI兼容)
-  Base URL: https://ark.cn-beijing.volces.com/api/v3
-  Model: 请输入接入点ID (格式: ep-xxxxx)
+  Base URL: https://apihub.agnes-ai.com/v1
+  Model: agnes-2.0-flash
 
 • GLM-4.7 (智谱AI)
   Base URL: https://open.bigmodel.cn/api/paas/v4
@@ -2159,7 +2159,7 @@ class MediaPilotSpaceWindow(QMainWindow):
         model = self.config.get("model", "")
         if provider == "ark":
             self.settings_model.setCurrentIndex(0)
-        elif provider == "openai" and "ark.cn-beijing" in self.config.get("base_url", ""):
+        elif provider == "openai" and "apihub.agnes-ai" in self.config.get("base_url", ""):
             self.settings_model.setCurrentIndex(1)
         elif "glm" in model.lower():
             self.settings_model.setCurrentIndex(2)
@@ -2172,14 +2172,14 @@ class MediaPilotSpaceWindow(QMainWindow):
         """模型选择变化"""
         presets = {
             0: {
-                "provider": "ark",
-                "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-                "model": "ep-m-20260311150444-fn2zc"
+                "provider": "openai",
+                "base_url": "https://apihub.agnes-ai.com/v1",
+                "model": "agnes-2.0-flash"
             },
             1: {
                 "provider": "openai",
-                "base_url": "https://ark.cn-beijing.volces.com/api/v3",
-                "model": "ep-m-20260311150444-fn2zc"
+                "base_url": "https://apihub.agnes-ai.com/v1",
+                "model": "agnes-2.0-flash"
             },
             2: {
                 "provider": "openai",

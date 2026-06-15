@@ -12,9 +12,11 @@ class MockDataService:
 
     def __init__(self):
         self.platforms = {
-            "douyin": "抖音",
+            "baidu": "百度新闻",
+            "weibo": "微博热搜",
+            "zhihu": "知乎热榜",
+            "douyin": "抖音热榜",
             "xiaohongshu": "小红书",
-            "weibo": "微博",
             "kuaishou": "快手",
             "bilibili": "B站"
         }
@@ -31,22 +33,28 @@ class MockDataService:
             f"{keyword}数据增长",
             f"{keyword}爆款标题",
             f"{keyword}流量密码",
-            f"{keyword}2024最新玩法"
+            f"2026最新{keyword}玩法"
         ]
 
         hot_topics = []
         for i, title in enumerate(topics):
+            platform_key = random.choice(platforms)
+            source_name = self.platforms.get(platform_key, platform_key)
             hot_topics.append({
                 "title": title,
-                "heat_index": random.randint(10000, 999999),
-                "platform": random.choice(platforms),
-                "trend": random.choice(["rising", "falling", "stable"]),
+                "heat_value": float(random.randint(10000, 999999)),
+                "source": source_name,
+                "trend_direction": random.choice(["up", "down", "same"]),
                 "summary": f"这是关于{title}的热点摘要...",
-                "url": f"https://example.com/topic/{i}",
-                "published_at": (datetime.now() - timedelta(days=random.randint(0, days))).isoformat()
+                "source_url": f"https://example.com/topic/{i}",
+                "published_at": datetime.now() - timedelta(days=random.randint(0, days)),
+                "crawled_at": datetime.now(),
+                "category": "综合",
+                "keywords": keyword,
+                "image_url": "",
             })
 
-        return sorted(hot_topics, key=lambda x: x["heat_index"], reverse=True)
+        return sorted(hot_topics, key=lambda x: x["heat_value"], reverse=True)
 
     def search_competitors(self, niche, platforms,
                            min_followers, max_followers,
@@ -91,18 +99,24 @@ class MockDataService:
 
     def fetch_video(self, video_url, platform):
         """获取视频信息（模拟）"""
+        # 从URL提取video_id
+        if '/video/' in video_url:
+            video_id = video_url.split('/video/')[-1].split('?')[0]
+        else:
+            video_id = video_url.split('/')[-1].split('?')[0]
+
         return {
-            "video_id": "video_001",
-            "title": "爆款视频标题示例",
+            "url": video_url,
             "platform": platform,
-            "author": "某个达人",
-            "views": random.randint(100000, 10000000),
-            "likes": random.randint(10000, 1000000),
-            "comments": random.randint(1000, 100000),
-            "shares": random.randint(1000, 50000),
-            "duration": random.randint(30, 120),
+            "video_id": video_id,
+            "title": "爆款视频标题示例",
+            "description": "这是一个关于爆款视频的描述...",
             "thumbnail_url": "https://example.com/thumb.jpg",
-            "video_url": video_url
+            "duration": random.randint(30, 120),
+            "view_count": random.randint(100000, 10000000),
+            "like_count": random.randint(10000, 1000000),
+            "comment_count": random.randint(1000, 100000),
+            "published_at": (datetime.now() - timedelta(days=random.randint(0, 30))).isoformat()
         }
 
     def get_video_transcript(self, video_id):

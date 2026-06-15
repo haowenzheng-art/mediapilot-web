@@ -31,7 +31,7 @@ class SimpleChatThread(QThread):
                 return
 
             api_key = self.config["api_key"]
-            base_url = self.config.get("base_url", "https://ark.cn-beijing.volces.com/api/v3")
+            base_url = self.config.get("base_url", "https://apihub.agnes-ai.com/v1")
             model = self.config.get("model", "")
             provider = self.config.get("provider", "openai")
 
@@ -476,7 +476,7 @@ if __name__ == "__main__":
     test_config = {
         "provider": "openai",
         "api_key": "1a73929c-d549-43e8-b03f-0d6e3e979771",
-        "base_url": "https://ark.cn-beijing.volces.com/api/v3",
+        "base_url": "https://apihub.agnes-ai.com/v1",
         "model": "ep-m-20260311150444-fn2zc"
     }
 

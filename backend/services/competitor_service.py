@@ -3,6 +3,9 @@
 """
 from fastapi.responses import StreamingResponse
 from typing import Iterator
+import sys
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from models.schemas.response import (
     CompetitorAccountResponse,
@@ -10,7 +13,8 @@ from models.schemas.response import (
 )
 from models.schemas.response import APIResponse
 from services.mock_data import MockDataService
-from backend.core.excel_exporter import ExcelExporter
+from core.platform_api import get_platform_api_manager
+from core.excel_exporter import ExcelExporter
 
 
 class CompetitorService:
@@ -19,6 +23,7 @@ class CompetitorService:
     def __init__(self):
         self.mock_data = MockDataService()
         self.excel_exporter = ExcelExporter()
+        self.platform_api = get_platform_api_manager().get_competitor_api()
 
     async def search(
         self,
@@ -41,20 +46,33 @@ class CompetitorService:
         Returns:
             对标账号搜索响应
         """
-        accounts = self.mock_data.search_competitors(
-            niche=niche,
-            platforms=platforms,
-            min_followers=min_followers,
-            max_followers=max_followers,
-            min_avg_likes=min_avg_likes
-        )
+        try:
+            # 优先使用平台API
+            accounts = await self.platform_api.search_competitors(
+                niche=niche,
+                platforms=platforms,
+                min_followers=min_followers,
+                max_followers=max_followers,
+                min_avg_likes=min_avg_likes
+            )
+        except Exception as e:
+            # API调用失败，降级到mock数据
+            import logging
+            logging.warning(f"平台API调用失败，使用mock数据: {e}")
+            accounts = self.mock_data.search_competitors(
+                niche=niche,
+                platforms=platforms,
+                min_followers=min_followers,
+                max_followers=max_followers,
+                min_avg_likes=min_avg_likes
+            )
 
         competitor_accounts = [CompetitorAccountResponse(**a) for a in accounts]
 
         return CompetitorSearchResponse(
             niche=niche,
             total_count=len(competitor_accounts),
-            accounts=competitor_accounts
+            competitors=competitor_accounts
         )
 
     async def export_excel(self, niche: str) -> Iterator[bytes]:
@@ -67,12 +85,25 @@ class CompetitorService:
         Returns:
             Excel 文件字节流
         """
-        accounts = self.mock_data.search_competitors(
-            niche=niche,
-            platforms=["douyin", "xiaohongshu"],
-            min_followers=10000,
-            max_followers=1000000,
-            min_avg_likes=100
-        )
+        try:
+            # 优先使用平台API
+            accounts = await self.platform_api.search_competitors(
+                niche=niche,
+                platforms=["douyin", "xiaohongshu"],
+                min_followers=10000,
+                max_followers=1000000,
+                min_avg_likes=100
+            )
+        except Exception as e:
+            # API调用失败，降级到mock数据
+            import logging
+            logging.warning(f"平台API调用失败，使用mock数据: {e}")
+            accounts = self.mock_data.search_competitors(
+                niche=niche,
+                platforms=["douyin", "xiaohongshu"],
+                min_followers=10000,
+                max_followers=1000000,
+                min_avg_likes=100
+            )
 
         return self.excel_exporter.export_competitors(accounts)

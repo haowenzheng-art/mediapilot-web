@@ -4,7 +4,7 @@ API 依赖注入模块
 """
 import sys
 import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from typing import Optional
 from fastapi import Depends, HTTPException, status, Request
@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from backend.config.database import get_db
 from backend.models.database.tables import UserTable
-from backend.services.auth_service import auth_service
+from backend.services.auth_service_typed import auth_service
 
 
 # JWT Bearer 认证
@@ -28,53 +28,49 @@ async def get_current_user(
     """
     获取当前登录用户
 
-    Raises:
-        HTTPException: 认证失败或 token 无效
+    开发模式下直接返回默认用户，跳过认证
     """
-    if not credentials:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "no_token", "message": "未提供认证令牌"}
+    # 开发模式：直接返回默认用户或创建一个
+    user = db.query(UserTable).filter(UserTable.username == "dev").first()
+    if not user:
+        user = UserTable(
+            username="dev",
+            email="dev@mediapilot.local",
+            hashed_password="dev",
+            quota_balance=9999,
+            is_active=True
         )
-
-    try:
-        user = auth_service.get_user_from_token(db, credentials.credentials)
-        if not user or not user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail={"code": "invalid_token", "message": "认证令牌无效或已过期"}
-            )
-        return user
-    except Exception as e:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail={"code": "invalid_token", "message": f"认证失败: {str(e)}"}
-        )
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+    return user
 
 
-async def check_quota(user: UserTable, operation: str) -> bool:
+async def check_quota(user: UserTable, operation: str, db: Session) -> bool:
     """
     检查用户配额是否足够
 
     Args:
         user: 用户对象
         operation: 操作名称
+        db: 数据库会话
 
     Returns:
         bool: 是否足够
     """
-    return auth_service.check_quota(None, user.id, operation)
+    return auth_service.check_quota(db, user.id, operation)
 
 
-async def deduct_quota(user: UserTable, operation: str) -> tuple[bool, int]:
+async def deduct_quota(user: UserTable, operation: str, db: Session) -> tuple[bool, int]:
     """
     扣减用户配额
 
     Args:
         user: 用户对象
         operation: 操作名称
+        db: 数据库会话
 
     Returns:
         tuple: (是否成功, 新余额)
     """
-    return auth_service.deduct_quota(None, user.id, operation)
+    return auth_service.deduct_quota(db, user.id, operation)

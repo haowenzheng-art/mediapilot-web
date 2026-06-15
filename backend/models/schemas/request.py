@@ -16,9 +16,11 @@ class AIProvider(str, Enum):
 
 class Platform(str, Enum):
     """社交平台"""
-    DOUYIN = "douyin"
-    XIAOHONGSHU = "xiaohongshu"
-    WEIBO = "weibo"
+    BAIDU = "baidu"              # 百度新闻
+    WEIBO = "weibo"              # 微博热搜
+    ZHIHU = "zhihu"              # 知乎热榜
+    DOUYIN = "douyin"            # 抖音热榜
+    XIAOHONGSHU = "xiaohongshu"  # 小红书
     KUAISHOU = "kuaishou"
     BILIBILI = "bilibili"
 
@@ -63,6 +65,11 @@ class VideoRewriteRequest(BaseModel):
     transcript: str = Field(..., description="原逐字稿")
     style: ContentStyle = Field(default=ContentStyle.PROFESSIONAL)
     target_duration: Optional[int] = Field(default=60, description="目标时长(秒)")
+
+
+class VideoTranscriptRequest(BaseModel):
+    """视频逐字稿请求"""
+    video_id: str = Field(..., min_length=1, description="视频ID")
 
 
 class ContentGenerateRequest(BaseModel):

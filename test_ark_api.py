@@ -15,11 +15,11 @@ from backend.core.ai_service import ai_manager
 
 # 配置API
 print("正在配置AI服务...")
-ai_manager.configure_service(
+ai_manager.configure(
     provider="ark",
     api_key="1a73929c-d549-43e8-b03f-0d6e3e979771",
-    base_url="https://ark.cn-beijing.volces.com/api/v3",
-    model="doubao-seed-2.0-pro-260215"
+    base_url="https://ark.cn-beijing.volces.com/api/coding",
+    model="ark-code-latest"
 )
 print("  ✓ 配置完成")
 print()
