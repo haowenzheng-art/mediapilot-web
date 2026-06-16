@@ -2,10 +2,6 @@
 AI文案参考爬虫
 从微博/百度/知乎获取相关内容作为AI生成文案的参考素材
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import logging
 from typing import List, Dict, Any, Optional
 from bs4 import BeautifulSoup

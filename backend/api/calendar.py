@@ -3,11 +3,6 @@
 提供日历事件的 CRUD 接口
 使用统一响应格式和分页
 """
-import sys
-import os
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
 from datetime import datetime
 from typing import Optional, List
 from fastapi import APIRouter, Depends, HTTPException, status, Query

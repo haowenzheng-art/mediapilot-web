@@ -2,13 +2,7 @@
 对标账号路由
 使用统一的 API 响应模型和错误处理
 """
-import sys
-import os
 import logging
-
-# 确保父目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 

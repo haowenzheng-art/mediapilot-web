@@ -2,15 +2,9 @@
 MediaPilot API 路由注册模块
 统一注册所有路由
 """
-import sys
-import os
 import logging
 from typing import Any
 from fastapi import FastAPI, Request, HTTPException, status
-
-# 确保父目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 from backend.core.ai_service import ai_manager
 from backend.core.transcribe_engine import TranscribeEngineManager
@@ -21,6 +15,8 @@ from backend.utils.exceptions_typed import DatabaseError
 
 # 导入速率限制
 from middleware.rate_limiting import create_rate_limiting_middleware
+
+from backend.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -92,6 +88,8 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         from .content_library import router as content_library_router
         # AI Chat 路由（无需认证）
         from .ai_chat import router as ai_chat_router
+        # 任务队列（无需认证）
+        from .task_queue import router as task_queue_router
 
         # 设置转写引擎
         if transcribe_engine is not None:
@@ -109,9 +107,15 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         app.include_router(subscription_router, prefix="/api/v1")
         app.include_router(content_library_router, prefix="/api/v1")
         # AI Chat 路由由 main.py 处理
+        # 任务队列路由
+        app.include_router(task_queue_router, prefix="/api/v1")
+        # Agent 路由
+        from .agent import router as agent_router
+        app.include_router(agent_router, prefix="/api/v1")
 
-        # 添加速率限制中间件
-        app.middleware("http")(create_rate_limiting_middleware())
+        # 添加速率限制中间件（开发模式下跳过）
+        if settings.RATE_LIMIT_ENABLED and not settings.DEV_MODE:
+            app.middleware("http")(create_rate_limiting_middleware())
 
         logger.info("所有路由注册完成")
 

@@ -3,17 +3,10 @@
 使用 Python 类型提示，遵循 PEP 8 标准
 """
 import logging
-import sys
-import os
 from typing import Optional, List, Dict, Any
 
-# 确保着父目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
-
-# 修复导入路径 - 使用完整路径
 from backend.models.schemas.response import HotTopicResponse, TrendingSearchResponse
-from services.mock_data import MockDataService
+from backend.services.mock_data import MockDataService
 from backend.core.platform_api import get_platform_api_manager
 
 logger = logging.getLogger(__name__)

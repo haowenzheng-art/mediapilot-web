@@ -2,19 +2,11 @@
 创建测试用户并获取 token
 
 用法:
-    # 从项目根目录运行
     python -m backend.scripts.create_test_user
-
-    # 或直接运行
     python backend/scripts/create_test_user.py
 """
 import os
 import sys
-
-# 确保项目根目录在 sys.path 中
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if project_root not in sys.path:
-    sys.path.insert(0, project_root)
 
 from backend.config.database import SessionLocal, init_db
 from backend.services.auth_service import auth_service

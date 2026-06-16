@@ -2,17 +2,10 @@
 MediaPilot 后端API服务入口
 """
 import sys
-import os
 import logging
 
-# 加载环境变量
-try:
-    from dotenv import load_dotenv
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    env_path = os.path.join(project_root, ".env")
-    load_dotenv(env_path)
-except ImportError:
-    pass
+# 导入 settings（pydantic-settings 自动加载 .env）
+from backend.config.settings import settings
 
 # 配置日志系统
 logging.basicConfig(
@@ -55,6 +48,9 @@ from backend.services.subscription_scheduler_service import schedule_push_tasks
 
 # 全局转写引擎实例
 transcribe_engine = None
+
+# ARQ Redis 连接池
+arq_pool = None
 
 # APScheduler 实例
 scheduler = BackgroundScheduler()
@@ -106,10 +102,15 @@ async def database_exception_handler(request: Request, exc: DatabaseError):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
-# CORS配置
+# CORS配置（开发模式放宽，生产模式使用 CORS_ORIGINS 指定的源）
+if settings.DEV_MODE:
+    cors_origins = ["*"]
+else:
+    cors_origins = settings.cors_origins_list
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -135,17 +136,19 @@ async def startup_event():
         pass
 
     # 初始化AI服务
-    if os.getenv("AI_API_KEY"):
+    from backend.config.settings import settings
+
+    if settings.AI_API_KEY:
         ai_manager.configure(
-            provider=os.getenv("AI_PROVIDER", "openai"),
-            api_key=os.getenv("AI_API_KEY"),
-            base_url=os.getenv("AI_BASE_URL"),
-            model=os.getenv("AI_MODEL", "agnes-2.0-flash"),
-            timeout=int(os.getenv("AI_TIMEOUT", "60")),
-            max_retries=3
+            provider=settings.AI_PROVIDER,
+            api_key=settings.AI_API_KEY,
+            base_url=settings.AI_BASE_URL,
+            model=settings.AI_MODEL,
+            timeout=settings.AI_TIMEOUT,
+            max_retries=settings.AI_MAX_RETRIES
         )
         if ai_manager.is_available():
-            logger.info(f"AI服务已配置: {os.getenv('AI_PROVIDER')}/{os.getenv('AI_MODEL')}")
+            logger.info(f"AI服务已配置: {settings.AI_PROVIDER}/{settings.AI_MODEL}")
         else:
             logger.warning("AI服务配置但不可用")
     else:
@@ -155,29 +158,29 @@ async def startup_event():
     global transcribe_engine
 
     try:
-        if os.getenv("USE_MOCK_TRANSCRIBE", "true").lower() == "true":
+        if settings.USE_MOCK_TRANSCRIBE:
             transcribe_engine = TranscribeEngineManager("mock", {})
             logger.info("转写引擎: mock 模式")
         else:
-            engine_type = os.getenv("TRANSCRIBE_ENGINE", "whisper_local")
+            engine_type = settings.TRANSCRIBE_ENGINE
             engine_config = {}
 
             if engine_type == "whisper_local":
                 engine_config = {
-                    "model": os.getenv("WHISPER_MODEL") or "base",
-                    "language": os.getenv("WHISPER_LANGUAGE") or "zh"
+                    "model": settings.WHISPER_MODEL or "base",
+                    "language": settings.WHISPER_LANGUAGE or "zh"
                 }
             elif engine_type == "aliyun":
                 engine_config = {
-                    "access_key_id": os.getenv("ALIYUN_ACCESS_KEY_ID", ""),
-                    "access_key_secret": os.getenv("ALIYUN_ACCESS_KEY_SECRET", ""),
-                    "app_key": os.getenv("ALIYUN_APP_KEY", "")
+                    "access_key_id": settings.ALIYUN_ACCESS_KEY_ID,
+                    "access_key_secret": settings.ALIYUN_ACCESS_KEY_SECRET,
+                    "app_key": settings.ALIYUN_APP_KEY
                 }
             elif engine_type == "volcengine":
                 engine_config = {
-                    "access_key": os.getenv("VOLCENGINE_ACCESS_KEY", ""),
-                    "secret_access_key": os.getenv("VOLCENGINE_SECRET_ACCESS_KEY", ""),
-                    "app_key": os.getenv("VOLCENGINE_APP_ID", "")
+                    "access_key": settings.VOLCENGINE_ACCESS_KEY,
+                    "secret_access_key": settings.VOLCENGINE_SECRET_ACCESS_KEY,
+                    "app_key": settings.VOLCENGINE_APP_ID
                 }
 
             transcribe_engine = TranscribeEngineManager(engine_type, engine_config)
@@ -190,6 +193,17 @@ async def startup_event():
     except Exception as e:
         logger.warning(f"转写引擎初始化失败: {e}，使用mock模式")
         transcribe_engine = None
+
+    # 初始化 ARQ Redis 连接池
+    global arq_pool
+    try:
+        from arq.connections import RedisConnections
+        redis_url = settings.REDIS_URL
+        arq_pool = await RedisConnections.from_url(redis_url, create_pool=True)
+        logger.info(f"ARQ Redis 连接成功: {redis_url}")
+    except Exception as e:
+        logger.warning(f"ARQ Redis 连接失败: {e}，任务队列不可用")
+        arq_pool = None
 
     # 启动定时任务
     if not scheduler.running:

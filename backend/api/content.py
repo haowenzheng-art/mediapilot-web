@@ -2,12 +2,7 @@
 内容生成路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -65,7 +60,7 @@ async def generate_content(
 
     try:
         if ai_manager.is_available():
-            script_data = ai_manager.generate_content_script(
+            script_data = await ai_manager.generate_content_script(
                 topic=req.topic,
                 platform=req.platform,
                 duration=req.duration,
@@ -102,7 +97,7 @@ async def rewrite_transcript(
 
     try:
         if ai_manager.is_available():
-            rewritten = ai_manager.rewrite_transcript(
+            rewritten = await ai_manager.rewrite_transcript(
                 req.transcript,
                 req.style,
                 req.target_duration or 60

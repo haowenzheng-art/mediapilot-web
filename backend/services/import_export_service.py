@@ -2,10 +2,6 @@
 导入导出服务
 处理 CSV/Excel 文件的读写操作
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import csv
 import io
 from typing import List, Dict, Any

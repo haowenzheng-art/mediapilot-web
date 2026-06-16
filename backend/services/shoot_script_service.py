@@ -1,10 +1,6 @@
 """
 拍摄脚本生成服务
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import logging
 import uuid
 from datetime import datetime
@@ -25,9 +21,9 @@ class ShootScriptService:
     def __init__(self):
         self._scripts = {}  # 临时存储（生产环境应该存数据库）
 
-    def generate(self, request: ShootScriptRequest) -> ShootScriptResponse:
+    async def generate(self, request: ShootScriptRequest) -> ShootScriptResponse:
         """
-        生成拍摄脚本
+        生成拍摄脚本（异步）
 
         Args:
             request: 生成请求
@@ -52,7 +48,7 @@ class ShootScriptService:
 
         if ai_manager.is_available():
             try:
-                ai_result = ai_manager.generate(prompt, max_tokens=3000)
+                ai_result = await ai_manager.generate(prompt, max_tokens=3000)
                 parsed = self._parse_ai_result(ai_result, request.platform)
                 shots = parsed.get("shots", [])
                 title = parsed.get("title", "")

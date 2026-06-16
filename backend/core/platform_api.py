@@ -4,11 +4,12 @@
 支持从第三方平台获取热点和对标账号数据
 包括：新榜、灰豚、微博热搜等数据源
 """
-import os
 import httpx
 from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 import logging
+
+from backend.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +41,7 @@ class HotTopicAPI:
     """热点话题API"""
 
     def __init__(self):
-        self.xinbang_api_key = os.getenv("XINBANG_API_KEY", "")
+        self.xinbang_api_key = settings.XINBANG_API_KEY
         self.weibo_api_url = "https://s.weibo.com/top/summary"
         self.timeout = 30
         self.client = httpx.AsyncClient(timeout=self.timeout)
@@ -241,8 +242,8 @@ class CompetitorAPI:
     """对标账号API"""
 
     def __init__(self):
-        self.huitun_api_key = os.getenv("HUITUN_API_KEY", "")
-        self.xinbang_api_key = os.getenv("XINBANG_API_KEY", "")
+        self.huitun_api_key = settings.HUITUN_API_KEY
+        self.xinbang_api_key = settings.XINBANG_API_KEY
         self.timeout = 30
         self.client = httpx.AsyncClient(timeout=self.timeout)
 

@@ -1,0 +1,16 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python -m py_compile api/ai_chat.py)",
+      "Bash(python -m py_compile api/auth.py)",
+      "Bash(python -m py_compile api/competitors.py)",
+      "Bash(python -m py_compile api/calendar.py)",
+      "Bash(python -m py_compile api/content.py)",
+      "Bash(python -m py_compile main.py)",
+      "Bash(python -m py_compile main_full.py)",
+      "Bash(python -m py_compile main_simple.py)",
+      "Bash(python -m py_compile simple_backend.py)",
+      "Bash(python -m py_compile services/copywriting_service.py)"
+    ]
+  }
+}

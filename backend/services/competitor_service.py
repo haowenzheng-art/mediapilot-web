@@ -3,18 +3,15 @@
 """
 from fastapi.responses import StreamingResponse
 from typing import Iterator
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from models.schemas.response import (
+from backend.models.schemas.response import (
     CompetitorAccountResponse,
     CompetitorSearchResponse,
 )
-from models.schemas.response import APIResponse
-from services.mock_data import MockDataService
-from core.platform_api import get_platform_api_manager
-from core.excel_exporter import ExcelExporter
+from backend.models.schemas.response import APIResponse
+from backend.services.mock_data import MockDataService
+from backend.core.platform_api import get_platform_api_manager
+from backend.core.excel_exporter import ExcelExporter
 
 
 class CompetitorService:

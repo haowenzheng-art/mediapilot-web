@@ -2,12 +2,7 @@
 话题订阅路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +24,9 @@ from backend.services.subscription_service import subscription_service
 from backend.models.database.tables import UserTable
 from backend.api.dependencies import get_current_user
 from backend.services.auth_service_typed import auth_service
+from backend.config.settings import settings, ensure_dev_user
 
 router = APIRouter(prefix="/subscriptions", tags=["话题订阅"])
-
-
-def get_dev_user(db: Session) -> UserTable:
-    """开发模式下获取默认用户"""
-    user = db.query(UserTable).filter(UserTable.username == "dev").first()
-    if not user:
-        user = UserTable(
-            username="dev",
-            email="dev@mediapilot.local",
-            password_hash="dev",
-            quota_balance=9999,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 @router.get("")
@@ -57,7 +36,7 @@ async def get_subscriptions(
     """
     获取用户的话题订阅列表
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         subscriptions = subscription_service.get_user_subscriptions(db, user.id)
@@ -82,7 +61,7 @@ async def create_subscription(
     """
     创建话题订阅
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "create_subscription"):
@@ -126,7 +105,7 @@ async def update_subscription(
     """
     更新话题订阅
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         subscription = subscription_service.update_subscription(db, subscription_id, user.id, sub_in)
@@ -157,7 +136,7 @@ async def delete_subscription(
     """
     删除话题订阅
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         success = subscription_service.delete_subscription(db, subscription_id, user.id)
@@ -195,7 +174,7 @@ async def pause_subscription(
     """
     暂停话题订阅
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         subscription = subscription_service.pause_subscription(db, subscription_id, user.id)
@@ -226,7 +205,7 @@ async def resume_subscription(
     """
     恢复话题订阅
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         subscription = subscription_service.resume_subscription(db, subscription_id, user.id)
@@ -257,7 +236,7 @@ async def get_push_records(
     """
     获取用户的推送记录
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         records = subscription_service.get_user_push_records(db, user.id, unread_only=unread_only)
@@ -282,7 +261,7 @@ async def mark_record_as_read(
     """
     标记推送记录为已读
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         record = subscription_service.mark_as_read(db, record_id, user.id)
@@ -312,7 +291,7 @@ async def get_unread_count(
     """
     获取用户未读推送数量
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         count = subscription_service.get_unread_count(db, user.id)

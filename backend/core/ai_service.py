@@ -5,7 +5,6 @@ MediaPilot AI服务模块
 import json
 import logging
 import re
-import time
 import httpx
 from typing import Optional, Dict, Any, List, AsyncGenerator
 from abc import ABC, abstractmethod
@@ -17,8 +16,8 @@ class AIService(ABC):
     """AI服务抽象基类"""
 
     @abstractmethod
-    def generate(self, prompt: str, **kwargs) -> str:
-        """生成文本"""
+    async def generate(self, prompt: str, **kwargs) -> str:
+        """生成文本（异步）"""
         pass
 
     @abstractmethod
@@ -59,13 +58,15 @@ class AnthropicService(AIService):
         except ImportError:
             self.client = None
 
-    def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
+    async def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
         if not self.client:
             raise RuntimeError("Anthropic客户端未初始化，请检查 anthropic 包是否是否安装")
 
+        import asyncio
         for attempt in range(self.max_retries):
             try:
-                message = self.client.messages.create(
+                message = await asyncio.to_thread(
+                    self.client.messages.create,
                     model=self.model,
                     max_tokens=max_tokens,
                     messages=[{"role": "user", "content": prompt}]
@@ -73,7 +74,7 @@ class AnthropicService(AIService):
                 return message.content[0].text
             except Exception as e:
                 if attempt < self.max_retries - 1:
-                    time.sleep(1 * (attempt + 1))
+                    await asyncio.sleep(1 * (attempt + 1))
                 else:
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
@@ -135,15 +136,17 @@ class OpenAIService(AIService):
         except ImportError:
             self.client = None
 
-    def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
+    async def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
         if not self.client:
             raise RuntimeError("OpenAI客户端未初始化，请检查 openai 包是否安装")
 
         logger.info(f"OpenAI API请求: base_url={self.base_url}, model={self.model}")
 
+        import asyncio
         for attempt in range(self.max_retries):
             try:
-                response = self.client.chat.completions.create(
+                response = await asyncio.to_thread(
+                    self.client.chat.completions.create,
                     model=self.model,
                     messages=[{"role": "user", "content": prompt}],
                     max_tokens=max_tokens,
@@ -153,7 +156,7 @@ class OpenAIService(AIService):
             except Exception as e:
                 if attempt < self.max_retries - 1:
                     logger.warning(f"OpenAI API重试 {attempt + 1}/{self.max_retries}: {e}")
-                    time.sleep(1 * (attempt + 1))
+                    await asyncio.sleep(1 * (attempt + 1))
                 else:
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
@@ -221,7 +224,7 @@ class ArkService(AIService):
         self.timeout = timeout
         self.max_retries = max_retries
 
-    def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
+    async def generate(self, prompt: str, max_tokens: int = 2000, **kwargs) -> str:
         try:
             import requests
         except ImportError:
@@ -247,9 +250,11 @@ class ArkService(AIService):
 
         logger.info(f"Ark API请求: url={url}, model={self.model}")
 
+        import asyncio
         for attempt in range(self.max_retries):
             try:
-                response = requests.post(
+                response = await asyncio.to_thread(
+                    requests.post,
                     url,
                     headers=headers,
                     json=data,
@@ -269,7 +274,7 @@ class ArkService(AIService):
             except Exception as e:
                 if attempt < self.max_retries - 1:
                     logger.warning(f"Ark API重试 {attempt + 1}/{self.max_retries}: {e}")
-                    time.sleep(1 * (attempt + 1))
+                    await asyncio.sleep(1 * (attempt + 1))
                 else:
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
@@ -401,14 +406,14 @@ class AIServiceManager:
         """获取当前AI服务"""
         return self.services.get(self.current_provider) if self.current_provider else None
 
-    def generate(self, prompt: str, **kwargs) -> str:
-        """使用当前服务生成内容"""
+    async def generate(self, prompt: str, **kwargs) -> str:
+        """使用当前服务生成内容（异步）"""
         service = self.get_current_service()
         if not service:
             raise RuntimeError("AI服务未配置")
         if not service.is_available():
             raise RuntimeError("AI服务不可用，请检查API密钥配置")
-        return service.generate(prompt, **kwargs)
+        return await service.generate(prompt, **kwargs)
 
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         """使用当前服务流式生成内容"""
@@ -425,9 +430,9 @@ class AIServiceManager:
         service = self.get_current_service()
         return service is not None and service.is_available()
 
-    def generate_content_script(self, topic: str, platform: str,
+    async def generate_content_script(self, topic: str, platform: str,
                                duration: int, style: str) -> Dict[str, Any]:
-        """生成分镜头脚本"""
+        """生成分镜头脚本（异步）"""
         prompt = f"""你是一个专业的新媒体内容创作专家。请为以下主题创作短视频分镜头脚本。
 
 主题: {topic}
@@ -454,7 +459,7 @@ class AIServiceManager:
     }}
 }}
 """
-        response = self.generate(prompt, max_tokens=3000)
+        response = await self.generate(prompt, max_tokens=3000)
         try:
             # 先尝试提取 markdown 代码块（兼容Ark API的响应格式）
             json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)
@@ -469,9 +474,9 @@ class AIServiceManager:
             raise RuntimeError(f"解析AI响应失败: {str(e)}")
         raise RuntimeError("AI响应未包含有效JSON")
 
-    def rewrite_transcript(self, transcript: str, style: str,
+    async def rewrite_transcript(self, transcript: str, style: str,
                         target_duration: int) -> str:
-        """改写逐字稿"""
+        """改写逐字稿（异步）"""
         prompt = f"""请将以下视频逐字稿改写成{style}风格，目标时长约{target_duration}秒。
 
 原文:
@@ -479,10 +484,10 @@ class AIServiceManager:
 
 请直接返回改写后的文案。
 """
-        return self.generate(prompt, max_tokens=1500)
+        return await self.generate(prompt, max_tokens=1500)
 
-    def generate_outline(self, transcript: str) -> List[Dict[str, str]]:
-        """生成大纲"""
+    async def generate_outline(self, transcript: str) -> List[Dict[str, str]]:
+        """生成大纲（异步）"""
         prompt = f"""请为以下文字内容生成结构化大纲，直接返回JSON格式，不要使用markdown代码块。
 
 内容:
@@ -496,7 +501,7 @@ class AIServiceManager:
     ]
 }}
 """
-        response = self.generate(prompt, max_tokens=1500)
+        response = await self.generate(prompt, max_tokens=1500)
         try:
             # 先尝试提取 markdown 代码块（兼容Ark API的响应格式）
             json_match = re.search(r'```json\s*(.*?)\s*```', response, re.DOTALL)

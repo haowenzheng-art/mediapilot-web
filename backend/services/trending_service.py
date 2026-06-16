@@ -1,14 +1,10 @@
 """
 热点搜索业务逻辑
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from models.schemas.response import HotTopicResponse, TrendingSearchResponse
-from services.mock_data import MockDataService
-from core.platform_api import get_platform_api_manager
-from models.hot_topics import HotTopic, HotTopicSubscription, HotTopicPush
+from backend.models.schemas.response import HotTopicResponse, TrendingSearchResponse
+from backend.services.mock_data import MockDataService
+from backend.core.platform_api import get_platform_api_manager
+from backend.models.hot_topics import HotTopic, HotTopicSubscription, HotTopicPush
 
 
 class TrendingService:

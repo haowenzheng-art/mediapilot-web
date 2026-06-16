@@ -2,13 +2,6 @@
 MediaPilot 集成测试 conftest
 使用内存 SQLite + StaticPool 确保同一连接共享
 """
-import sys
-import os
-
-# 确保项目根目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
-
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine

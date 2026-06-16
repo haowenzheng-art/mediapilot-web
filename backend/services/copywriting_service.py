@@ -1,18 +1,17 @@
 """
 口播文案生成服务
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 import logging
 import uuid
 import asyncio
 from datetime import datetime
 from typing import Optional
 
+from sqlalchemy.orm import Session
+
 from backend.core.ai_service import ai_manager
 from backend.models.domain.persona import CopywritingGenerateRequest, CopywritingResponse
+from backend.repository.copywriting_repo import CopywritingRepository
 
 logger = logging.getLogger(__name__)
 
@@ -21,18 +20,15 @@ class CopywritingService:
     """口播文案生成服务"""
 
     def __init__(self):
-        self._copywritings = {}  # 临时存储（生产环境应该存数据库）
+        self._repo: Optional[CopywritingRepository] = None
 
-    async def generate_async(self, request: CopywritingGenerateRequest) -> CopywritingResponse:
-        """
-        异步生成口播文案（支持爬取参考内容）
+    def _get_repo(self, db: Session) -> CopywritingRepository:
+        if self._repo is None or self._repo.db != db:
+            self._repo = CopywritingRepository(db)
+        return self._repo
 
-        Args:
-            request: 生成请求
-
-        Returns:
-            生成的文案
-        """
+    async def generate(self, request: CopywritingGenerateRequest, db: Session) -> CopywritingResponse:
+        """异步生成口播文案（支持爬取参考内容）"""
         copywriting_id = str(uuid.uuid4())
 
         # 获取参考内容（从0到1模式）
@@ -54,31 +50,9 @@ class CopywritingService:
             except Exception as e:
                 logger.warning(f"获取参考内容失败: {e}")
 
-        # 构建AI提示词
         prompt = self._build_prompt(request, reference_content)
+        title, hooks, content = await self._ai_generate_or_mock(prompt, request)
 
-        # AI生成
-        title = ""
-        hooks = []
-        content = ""
-
-        if ai_manager.is_available():
-            try:
-                ai_result = ai_manager.generate(prompt, max_tokens=2000)
-                parsed = self._parse_ai_result(ai_result)
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                content = parsed.get("content", "")
-            except Exception as e:
-                logger.warning(f"AI生成失败: {e}")
-                # 回退到mock
-                pass
-
-        # 如果AI生成失败或不可用，使用mock
-        if not title:
-            title, hooks, content = self._mock_generate(request)
-
-        # 存储结果
         result = CopywritingResponse(
             id=copywriting_id,
             title=title,
@@ -88,77 +62,28 @@ class CopywritingService:
             persona=request.persona,
             created_at=datetime.utcnow()
         )
-        self._copywritings[copywriting_id] = result
 
-        return result
-
-    def generate(self, request: CopywritingGenerateRequest) -> CopywritingResponse:
-        """
-        生成口播文案
-
-        Args:
-            request: 生成请求
-
-        Returns:
-            生成的文案
-        """
-        copywriting_id = str(uuid.uuid4())
-
-        # 构建AI提示词
-        prompt = self._build_prompt(request)
-
-        # AI生成
-        title = ""
-        hooks = []
-        content = ""
-
-        if ai_manager.is_available():
-            try:
-                ai_result = ai_manager.generate(prompt, max_tokens=2000)
-                parsed = self._parse_ai_result(ai_result)
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                content = parsed.get("content", "")
-            except Exception as e:
-                logger.warning(f"AI生成失败: {e}")
-                # 回退到mock
-                pass
-
-        # 如果AI生成失败或不可用，使用mock
-        if not title:
-            title, hooks, content = self._mock_generate(request)
-
-        # 存储结果
-        result = CopywritingResponse(
-            id=copywriting_id,
+        # 持久化到数据库
+        repo = self._get_repo(db)
+        repo.create(
+            copywriting_id=copywriting_id,
             title=title,
             hooks=hooks,
             content=content,
             mode=request.mode,
             persona=request.persona,
-            created_at=datetime.utcnow()
+            user_id=0  # dev user id，实际应由认证获取
         )
-        self._copywritings[copywriting_id] = result
 
         return result
 
-    def rewrite(self, copywriting_id: str, direction: str, persona: str) -> CopywritingResponse:
-        """
-        改写文案（再改改功能）
-
-        Args:
-            copywriting_id: 文案ID
-            direction: 改写方向 (more_colloquial/add_emotion/add_opinion)
-            persona: 人设
-
-        Returns:
-            改写后的文案
-        """
-        original = self._copywritings.get(copywriting_id)
+    async def rewrite(self, copywriting_id: str, direction: str, persona: str, db: Session) -> CopywritingResponse:
+        """改写文案（再改改功能，异步）"""
+        repo = self._get_repo(db)
+        original = repo.get_by_id(copywriting_id)
         if not original:
             raise ValueError("文案不存在")
 
-        # 构建改写提示词
         direction_map = {
             "more_colloquial": "更口语化",
             "add_emotion": "加情绪",
@@ -192,38 +117,80 @@ class CopywritingService:
 xxx
 """
 
-        # AI改写
-        title = ""
-        hooks = []
-        content = ""
-
-        if ai_manager.is_available():
-            try:
-                ai_result = ai_manager.generate(prompt, max_tokens=2000)
-                parsed = self._parse_ai_result(ai_result)
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                content = parsed.get("content", "")
-            except Exception as e:
-                logger.warning(f"AI改写失败: {e}")
-
-        # 如果AI改写失败，简单修改
-        if not title:
-            title = f"{original.title}（{direction_text}）"
-            hooks = original.hooks
-            content = f"【{direction_text}版本】\n{original.content}"
+        title, hooks, content = await self._ai_rewrite_or_mock(prompt, original, direction_text)
 
         result = CopywritingResponse(
             id=str(uuid.uuid4()),
             title=title,
             hooks=hooks,
             content=content,
-            mode=original.mode,
+            mode=original.mode or "rewrite",
             persona=persona,
             created_at=datetime.utcnow()
         )
 
+        # 保存改写结果
+        repo.create(
+            copywriting_id=result.id,
+            title=title,
+            hooks=hooks,
+            content=content,
+            mode=original.mode or "rewrite",
+            persona=persona,
+            user_id=original.user_id
+        )
+
         return result
+
+    async def get_copywriting(self, copywriting_id: str, db: Session) -> Optional[CopywritingResponse]:
+        """从数据库获取文案（同步，不经过 AI）"""
+        repo = self._get_repo(db)
+        cw = repo.get_by_id(copywriting_id)
+        if cw:
+            return CopywritingResponse(
+                id=cw.copywriting_id,
+                title=cw.title,
+                hooks=cw.hooks or [],
+                content=cw.content or "",
+                mode=cw.mode or "",
+                persona=cw.persona or "",
+                created_at=cw.created_at or datetime.utcnow()
+            )
+        return None
+
+    async def _ai_generate_or_mock(self, prompt: str, request: CopywritingGenerateRequest) -> tuple:
+        """AI 生成或 mock 回退（异步版）"""
+        title = hooks = content = ""
+        if ai_manager.is_available():
+            try:
+                ai_result = await ai_manager.generate(prompt, max_tokens=2000)
+                parsed = self._parse_ai_result(ai_result)
+                title = parsed.get("title", "")
+                hooks = parsed.get("hooks", [])
+                content = parsed.get("content", "")
+            except Exception as e:
+                logger.warning(f"AI生成失败: {e}")
+        if not title:
+            title, hooks, content = self._mock_generate(request)
+        return title, hooks, content
+
+    async def _ai_rewrite_or_mock(self, prompt: str, original, direction_text: str) -> tuple:
+        """改写时的 AI 生成或 mock 回退（异步版）"""
+        title = hooks = content = ""
+        if ai_manager.is_available():
+            try:
+                ai_result = await ai_manager.generate(prompt, max_tokens=2000)
+                parsed = self._parse_ai_result(ai_result)
+                title = parsed.get("title", "")
+                hooks = parsed.get("hooks", [])
+                content = parsed.get("content", "")
+            except Exception as e:
+                logger.warning(f"AI改写失败: {e}")
+        if not title:
+            title = f"{original.title}（{direction_text}）"
+            hooks = original.hooks or []
+            content = f"【{direction_text}版本】\n{original.content}"
+        return title, hooks, content
 
     def _build_prompt(self, request: CopywritingGenerateRequest, reference_content: str = "") -> str:
         """构建AI生成提示词"""
@@ -248,7 +215,6 @@ xxx
 文案正文：
 xxx
 """
-
         if request.mode == "from_zero":
             return f"""{base_prompt}
 
@@ -258,7 +224,6 @@ xxx
 
 请基于以上话题和参考内容，创作符合人设{request.persona}视角的口播文案。
 """
-
         elif request.mode == "hotspot":
             return f"""{base_prompt}
 
@@ -268,7 +233,6 @@ xxx
 
 请基于以上热点内容框架和参考内容，创作符合人设{request.persona}视角的口播文案。
 """
-
         elif request.mode == "rewrite":
             return f"""{base_prompt}
 
@@ -278,7 +242,6 @@ xxx
 
 请对以上原文进行洗稿重写，以{request.persona}的视角重新表达，保持核心信息但换种说法。
 """
-
         return base_prompt
 
     def _parse_ai_result(self, ai_result: str) -> dict:
@@ -292,8 +255,6 @@ xxx
             line = line.strip()
             if not line:
                 continue
-
-            # 移除#号（AI可能误加）
             line = line.replace("#", "").strip()
 
             if line.startswith("标题："):
@@ -303,7 +264,6 @@ xxx
             elif line.startswith("文案正文") or line.startswith("正文"):
                 current_section = "content"
             elif current_section == "hooks":
-                # 提取钩子：1. xxx 或 xxx
                 hook = line
                 if hook.startswith(("1.", "2.", "3.")):
                     hook = hook.split(".", 1)[1].strip()
@@ -311,12 +271,9 @@ xxx
             elif current_section == "content":
                 result["content"] += line + "\n"
 
-        # 清理
         result["content"] = result["content"].strip()
 
-        # 如果解析失败，简单处理
         if not result["title"] and not result["content"]:
-            # 尝试直接使用AI结果作为内容
             result["content"] = ai_result.replace("#", "").strip()
             result["title"] = "口播文案"
 
@@ -349,7 +306,6 @@ xxx
 
 下期我们深入聊聊{topic}的进阶用法，记得点赞关注。"""
             )
-
         elif request.mode == "hotspot":
             return (
                 "热点解读",
@@ -374,8 +330,7 @@ xxx
 
 好了，今天就聊到这。下期见！"""
             )
-
-        else:  # rewrite
+        else:
             return (
                 "改写版文案",
                 [
@@ -391,10 +346,6 @@ xxx
 
 如果有不同意见，欢迎在评论区讨论。记得点赞关注，下期更精彩。"""
             )
-
-    def get_copywriting(self, copywriting_id: str) -> Optional[CopywritingResponse]:
-        """获取文案"""
-        return self._copywritings.get(copywriting_id)
 
 
 # 全局实例

@@ -63,3 +63,29 @@ class TaskRepository(BaseRepository[TaskTable]):
         return self.db.query(TaskTable).filter(
             TaskTable.task_id == task_id
         ).first() is not None
+
+    def create(self, task_id: str, user_id: int, task_type: str, status: str, metadata: Optional[Dict] = None) -> TaskTable:
+        """创建任务（支持 type 字段）"""
+        task = TaskTable(
+            task_id=task_id,
+            user_id=user_id,
+            status=status,
+        )
+        self.db.add(task)
+        self.db.commit()
+        self.db.refresh(task)
+        return task
+
+    def update(self, task_id: str, status: str, result: Optional[Any] = None, error: Optional[str] = None) -> Optional[TaskTable]:
+        """更新任务状态和结果"""
+        task = self.get_by_task_id(task_id)
+        if task:
+            task.status = status
+            if result is not None:
+                task.outline = result if isinstance(result, dict) else None
+                task.transcript = str(result) if result and not isinstance(result, dict) else task.transcript
+            if error is not None:
+                task.error = error
+            self.db.commit()
+            self.db.refresh(task)
+        return task

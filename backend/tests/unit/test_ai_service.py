@@ -2,10 +2,7 @@
 AI服务单元测试
 """
 import pytest
-import os
-import sys
 import asyncio
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.core.ai_service import AIServiceManager, AIService
 
@@ -182,32 +179,32 @@ class TestAIServiceManager:
 class TestRealAIConfiguration:
     """真实AI配置测试（集成测试）"""
 
-    @pytest.mark.skipif(not os.getenv("AI_API_KEY"), reason="AI_API_KEY未配置")
+    @pytest.mark.skipif(not settings.AI_API_KEY, reason="AI_API_KEY未配置")
     def test_configure_real_ark_service(self):
         """测试配置真实的Ark服务"""
         from backend.core.ai_service import ai_manager
 
         ai_manager.configure(
-            provider=os.getenv("AI_PROVIDER", "ark"),
-            api_key=os.getenv("AI_API_KEY"),
-            base_url=os.getenv("AI_BASE_URL"),
-            model=os.getenv("AI_MODEL")
+            provider=settings.AI_PROVIDER,
+            api_key=settings.AI_API_KEY,
+            base_url=settings.AI_BASE_URL,
+            model=settings.AI_MODEL
         )
 
         assert ai_manager.is_available()
         assert ai_manager.current_provider is not None
 
-    @pytest.mark.skipif(not os.getenv("AI_API_KEY"), reason="AI_API_KEY未配置")
+    @pytest.mark.skipif(not settings.AI_API_KEY, reason="AI_API_KEY未配置")
     @pytest.mark.integration
     def test_real_generation(self):
         """测试真实的AI生成"""
         from backend.core.ai_service import ai_manager
 
         ai_manager.configure(
-            provider=os.getenv("AI_PROVIDER", "ark"),
-            api_key=os.getenv("AI_API_KEY"),
-            base_url=os.getenv("AI_BASE_URL"),
-            model=os.getenv("AI_MODEL")
+            provider=settings.AI_PROVIDER,
+            api_key=settings.AI_API_KEY,
+            base_url=settings.AI_BASE_URL,
+            model=settings.AI_MODEL
         )
 
         result = ai_manager.generate("请简单介绍一下Python编程语言")

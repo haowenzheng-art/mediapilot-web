@@ -2,12 +2,7 @@
 口播文案生成路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 
@@ -31,25 +26,9 @@ from backend.models.database.tables import UserTable
 from backend.api.dependencies import get_current_user
 from backend.services.auth_service_typed import auth_service
 from backend.models.domain.content_library import ContentCreate, ContentType
+from backend.config.settings import settings, ensure_dev_user
 
 router = APIRouter(prefix="/copywriting", tags=["口播文案"])
-
-
-def get_dev_user(db: Session) -> UserTable:
-    """开发模式下获取默认用户"""
-    user = db.query(UserTable).filter(UserTable.username == "dev").first()
-    if not user:
-        user = UserTable(
-            username="dev",
-            email="dev@mediapilot.local",
-            password_hash="dev",
-            quota_balance=9999,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 @router.get("/personas")
@@ -59,7 +38,7 @@ async def get_personas(
     """
     获取用户的人设列表（最近3条）
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         personas = persona_service.get_user_personas(db, user.id)
@@ -84,7 +63,7 @@ async def create_persona(
     """
     创建人设
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         persona = persona_service.create_persona(db, user.id, persona_in)
@@ -113,7 +92,7 @@ async def delete_persona(
     """
     删除人设
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         success = persona_service.delete_persona(db, persona_id)
@@ -150,7 +129,7 @@ async def generate_copywriting(
     - hotspot: 热点框架，需要hotspot_content参数
     - rewrite: 改写，需要original_text参数
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "generate_copywriting"):
@@ -165,7 +144,7 @@ async def generate_copywriting(
         persona_service.update_persona_last_used(db, user.id, request.persona)
 
         # 生成文案
-        result = copywriting_service.generate(request)
+        result = await copywriting_service.generate(request, db)
 
         # 保存到内容库
         try:
@@ -222,10 +201,10 @@ async def rewrite_copywriting(
     - add_emotion: 加情绪
     - add_opinion: 加观点
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 获取原文案
-    original = copywriting_service.get_copywriting(request.copywriting_id)
+    original = await copywriting_service.get_copywriting(request.copywriting_id, db)
     if not original:
         return error_response(
             code=ErrorCode.NOT_FOUND,
@@ -243,10 +222,11 @@ async def rewrite_copywriting(
 
     try:
         # 改写文案
-        result = copywriting_service.rewrite(
+        result = await copywriting_service.rewrite(
             request.copywriting_id,
             request.direction,
-            original.persona
+            original.persona,
+            db
         )
 
         # 扣减配额

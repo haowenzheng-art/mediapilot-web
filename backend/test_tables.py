@@ -1,8 +1,4 @@
 """测试数据库表创建"""
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from sqlalchemy import create_engine
 from backend.models.database.base import Base
 from backend.models.database.tables import UserTable, CalendarEventTable, TaskTable

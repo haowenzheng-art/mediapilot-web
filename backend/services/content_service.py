@@ -88,7 +88,7 @@ class ContentService:
             )
 
         # 使用 AI 生成
-        result = ai_manager.generate_content_script(
+        result = await ai_manager.generate_content_script(
             topic,
             platform,
             duration,
@@ -125,7 +125,7 @@ class ContentService:
         if not ai_manager.get_current_service() or not ai_manager.get_current_service().is_available():
             return None
 
-        rewritten = ai_manager.rewrite_transcript(
+        rewritten = await ai_manager.rewrite_transcript(
             transcript,
             style,
             target_duration

@@ -2,12 +2,7 @@
 拍摄脚本生成路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +24,9 @@ from backend.models.database.tables import UserTable
 from backend.api.dependencies import get_current_user
 from backend.services.auth_service_typed import auth_service
 from backend.models.domain.content_library import ContentCreate, ContentType
+from backend.config.settings import settings, ensure_dev_user
 
 router = APIRouter(prefix="/shoot-script", tags=["拍摄脚本"])
-
-
-def get_dev_user(db: Session) -> UserTable:
-    """开发模式下获取默认用户"""
-    user = db.query(UserTable).filter(UserTable.username == "dev").first()
-    if not user:
-        user = UserTable(
-            username="dev",
-            email="dev@mediapilot.local",
-            password_hash="dev",
-            quota_balance=9999,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 @router.post("/generate")
@@ -68,7 +47,7 @@ async def generate_shoot_script(
     - relaxed: 轻松幽默
     - professional: 专业分析
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "generate_shoot_script"):
@@ -80,7 +59,7 @@ async def generate_shoot_script(
 
     try:
         # 生成脚本
-        result = shoot_script_service.generate(request)
+        result = await shoot_script_service.generate(request)
 
         # 保存到内容库
         try:

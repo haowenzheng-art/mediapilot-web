@@ -2,13 +2,8 @@
 内容库路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
 from typing import Optional
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 
@@ -27,25 +22,9 @@ from backend.utils.api_response import (
 )
 from backend.services.content_library_service import content_library_service
 from backend.models.database.tables import UserTable
+from backend.config.settings import settings, ensure_dev_user
 
 router = APIRouter(prefix="/content-library", tags=["内容库"])
-
-
-def get_dev_user(db: Session) -> UserTable:
-    """开发模式下获取默认用户"""
-    user = db.query(UserTable).filter(UserTable.username == "dev").first()
-    if not user:
-        user = UserTable(
-            username="dev",
-            email="dev@mediapilot.local",
-            password_hash="dev",
-            quota_balance=9999,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 @router.get("/contents")
@@ -65,7 +44,7 @@ async def get_contents(
     - is_processed: 是否已处理
     - hot_topic_id: 关联的热点ID
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         # 验证 content_type
@@ -113,7 +92,7 @@ async def create_content(
 
     用于在生成文案/脚本后自动保存到内容库
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         content = content_library_service.create_content(db, user.id, content_in)
@@ -138,7 +117,7 @@ async def get_content(
     """
     获取单条内容详情
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         content = content_library_service.get_content_by_id(db, content_id)
@@ -179,7 +158,7 @@ async def update_content(
     """
     更新内容记录
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         content = content_library_service.update_content(db, content_id, user.id, content_in)
@@ -210,7 +189,7 @@ async def delete_content(
     """
     删除内容记录
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         success = content_library_service.delete_content(db, content_id, user.id)
@@ -250,7 +229,7 @@ async def mark_as_processed(
 
     用户将内容用于创作后，标记为已处理
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         content = content_library_service.mark_as_processed(db, content_id, user.id)
@@ -284,7 +263,7 @@ async def get_hot_topic_contents(
 
     查看基于该热点生成的所有文案和脚本
     """
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     try:
         contents = content_library_service.get_hot_topic_contents(

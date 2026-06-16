@@ -2,7 +2,6 @@
 JWT 工具模块
 提供 JWT access token 和 refresh token 的生成与验证
 """
-import os
 import hashlib
 import uuid
 import jwt
@@ -10,9 +9,9 @@ from datetime import datetime, timedelta
 from typing import Dict, Optional
 from jwt import PyJWTError
 
+from backend.config.settings import settings
 
-# JWT 配置
-SECRET_KEY = os.getenv("JWT_SECRET", "your-secret-key-change-in-production")
+
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 30  # 30分钟
 REFRESH_TOKEN_EXPIRE_DAYS = 7     # 7天
@@ -44,7 +43,7 @@ def create_access_token(data: Dict, expires_delta: Optional[timedelta] = None) -
 
     to_encode.update({"exp": expire})
 
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
 def create_refresh_token(data: Dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -69,7 +68,7 @@ def create_refresh_token(data: Dict, expires_delta: Optional[timedelta] = None) 
 
     to_encode.update({"exp": expire})
 
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=ALGORITHM)
 
 
 def decode_token(token: str, expected_type: Optional[str] = None) -> Dict:
@@ -87,7 +86,7 @@ def decode_token(token: str, expected_type: Optional[str] = None) -> Dict:
         PyJWTError: token 无效、过期或类型不匹配
     """
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=[ALGORITHM])
 
         if expected_type and payload.get("type") != expected_type:
             raise PyJWTError(f"Expected {expected_type} token, got {payload.get('type')}")

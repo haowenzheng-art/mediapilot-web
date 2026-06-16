@@ -2,10 +2,6 @@
 """
 MediaPilot 后端API路由
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.responses import StreamingResponse
 from typing import Dict, Any, List, Optional
@@ -129,7 +125,7 @@ async def rewrite_video(request: VideoRewriteRequest):
             data=None
         )
 
-    rewritten = ai_manager.rewrite_transcript(
+    rewritten = await ai_manager.rewrite_transcript(
         request.transcript,
         request.style.value,
         request.target_duration or 60
@@ -164,7 +160,7 @@ async def generate_content(request: ContentGenerateRequest):
             )
         )
 
-    result = ai_manager.generate_content_script(
+    result = await ai_manager.generate_content_script(
         request.topic,
         request.platform.value,
         request.duration,

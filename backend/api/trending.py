@@ -2,13 +2,7 @@
 热点搜索路由
 使用统一的 API 响应模型
 """
-import sys
-import os
 import logging
-
-# 确保父目录在路径中
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
 
 logger = logging.getLogger(__name__)
 
@@ -32,6 +26,7 @@ from backend.services.content_library_service import content_library_service
 from backend.config.database import get_db
 from backend.core.ai_service import ai_manager
 from backend.models.database.tables import UserTable
+from backend.config.settings import settings, ensure_dev_user
 from backend.services.auth_service import auth_service
 from backend.services.import_export_service import import_export_service
 
@@ -39,23 +34,6 @@ router = APIRouter(prefix="/trending", tags=["热点搜索"])
 
 # 初始化服务
 trending_service = TrendingService()
-
-
-def get_dev_user(db: Session) -> UserTable:
-    """开发模式下获取默认用户"""
-    user = db.query(UserTable).filter(UserTable.username == "dev").first()
-    if not user:
-        user = UserTable(
-            username="dev",
-            email="dev@mediapilot.local",
-            password_hash="dev",
-            quota_balance=9999,
-            is_active=True
-        )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
-    return user
 
 
 class ArticleContentRequest(BaseModel):
@@ -83,7 +61,7 @@ async def search_trending(
     使用统一的响应模型和错误处理
     """
     # 开发模式：直接返回默认用户
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "search_trending"):
@@ -158,7 +136,7 @@ async def get_topic_summary(request: SummaryRequest, db: Session = Depends(get_d
     返回热点事件的背景、关键事实、影响分析等内容
     """
     # 开发模式：直接返回默认用户
-    user = get_dev_user(db)
+    user = ensure_dev_user(db)
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "ai_summary"):
@@ -206,7 +184,7 @@ async def get_topic_summary(request: SummaryRequest, db: Session = Depends(get_d
         ai_content = ""
         if ai_manager.is_available():
             try:
-                ai_content = ai_manager.generate(prompt, max_tokens=1500)
+                ai_content = await ai_manager.generate(prompt, max_tokens=1500)
             except Exception as e:
                 logger.warning(f"AI生成失败: {e}")
 

@@ -3,10 +3,6 @@
 处理日历事件的 CRUD 操作
 添加分页和事务管理
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 from typing import List, Optional, Tuple
 from datetime import datetime
 from sqlalchemy.orm import Session

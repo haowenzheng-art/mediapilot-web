@@ -1,12 +1,7 @@
 """
 视频分析路由
 """
-import sys
-import os
 import logging
-
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-sys.path.insert(0, project_root)
 
 from fastapi import APIRouter, Query
 from fastapi.responses import Response
@@ -46,7 +41,7 @@ async def rewrite_video(request: VideoRewriteRequest):
 
     try:
         if ai_manager.is_available():
-            rewritten = ai_manager.rewrite_transcript(
+            rewritten = await ai_manager.rewrite_transcript(
                 request.transcript,
                 request.style.value,
                 request.target_duration or 60

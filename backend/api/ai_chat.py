@@ -7,10 +7,6 @@ import os
 from typing import Optional, List
 from pydantic import BaseModel, Field
 
-# 设置项目根目录（MediaPilot/）
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, project_root)
-
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from backend.core.ai_service import ai_manager
@@ -53,8 +49,8 @@ async def chat_endpoint(request: ChatRequest):
     try:
         prompt = request.messages[0].content if request.messages else ""
 
-        # 使用同步的 generate 方法
-        result = ai_manager.generate(prompt, max_tokens=request.max_tokens)
+        # 使用异步的 generate 方法
+        result = await ai_manager.generate(prompt, max_tokens=request.max_tokens)
 
         return {"content": result}
     except Exception as e:

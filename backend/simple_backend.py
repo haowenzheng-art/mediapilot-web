@@ -2,9 +2,6 @@
 """
 MediaPilot 简化版后端 - 先用这个测试
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 print("="*60)
 print("   MediaPilot Backend - Simplified")

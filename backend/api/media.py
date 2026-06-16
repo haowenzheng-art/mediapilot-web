@@ -1,10 +1,6 @@
 """
 媒体处理路由
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from typing import Optional
 from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status
 from sqlalchemy.orm import Session

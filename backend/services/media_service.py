@@ -125,7 +125,7 @@ class MediaService:
             outline_dict = []
             try:
                 if ai_manager.get_current_service() and ai_manager.get_current_service().is_available():
-                    outline_dict = ai_manager.generate_outline(result["transcript"])
+                    outline_dict = await ai_manager.generate_outline(result["transcript"])
             except Exception as e:
                 logger.warning(f"AI outline generation failed, using default: {e}")
 

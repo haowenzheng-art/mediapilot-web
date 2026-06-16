@@ -90,6 +90,7 @@ class UserTable(Base):
     user_personas = relationship("UserPersonaTable")
     user_subscriptions = relationship("SubscriptionTable")
     token_blacklist_entries = relationship("TokenBlacklistTable", back_populates="user")
+    user_copywritings = relationship("CopywritingTable")
 
     # 复合索引
     __table_args__ = (

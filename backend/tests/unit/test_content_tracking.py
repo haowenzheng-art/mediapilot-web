@@ -2,10 +2,6 @@
 内容关联单元测试
 测试 ContentLibraryRepository 和 HotTopicTrendRepository
 """
-import sys
-import os
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 import pytest
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session

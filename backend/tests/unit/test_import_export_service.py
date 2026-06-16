@@ -1,11 +1,6 @@
 """
 导入导出服务单元测试
 """
-import sys
-import os
-__file__ = __file__
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 import pytest
 from unittest.mock import Mock, patch, AsyncMock
 from io import BytesIO
