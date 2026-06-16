@@ -1,7 +1,7 @@
 """
 内容生成业务逻辑
 """
-from models.schemas.response import (
+from backend.models.schemas.response import (
     Shot,
     Copywriting,
     ContentGenerateResponse,

@@ -6,7 +6,7 @@ import uuid
 from typing import Dict, Any, Optional
 from sqlalchemy.orm import Session
 
-from models.schemas.response import (
+from backend.models.schemas.response import (
     TranscriptLine,
     OutlineItem,
     MediaTranscribeResponse,

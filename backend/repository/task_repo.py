@@ -4,7 +4,7 @@
 from typing import Optional, List, Dict, Any
 from sqlalchemy.orm import Session
 from .base_repository import BaseRepository
-from models.database.tables import TaskTable
+from backend.models.database.tables import TaskTable
 
 
 class TaskRepository(BaseRepository[TaskTable]):

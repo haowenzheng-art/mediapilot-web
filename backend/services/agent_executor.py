@@ -9,7 +9,7 @@ LLM 被注入工具描述后，自行决定何时调用工具、如何组合结�
 import json
 import logging
 import re
-from typing import Optional
+from typing import Optional, Any
 
 from backend.core.ai_service import ai_manager
 from backend.services.agent_service import tool_registry

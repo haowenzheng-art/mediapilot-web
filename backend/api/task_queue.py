@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 from typing import Optional, List
 
-from arq.connections import RedisConnections
+from arq.connections import RedisSettings, create_pool
 
 from backend.config.database import get_db
 from backend.config.settings import settings
@@ -26,10 +26,24 @@ router = APIRouter(prefix="/tasks", tags=["任务队列"])
 
 # ------------------- Redis 连接 -------------------
 
+def _parse_redis_url(url: str) -> dict:
+    """将 redis:// URL 解析为 RedisSettings 参数"""
+    import re
+    m = re.match(r'redis://(?:::?)(?:(\w+):(\w+)@)?([^:]+)(?::(\d+))?(?:/(\d+))?', url)
+    if not m:
+        return {}
+    return {
+        "host": m.group(3),
+        "port": int(m.group(4) or "6379"),
+        "database": int(m.group(5) or "0"),
+    }
+
+
 async def get_redis_pool():
     """获取 ARQ Redis 连接池（依赖注入）"""
     redis_url = getattr(settings, "REDIS_URL", "redis://localhost:6379/0")
-    pool = await RedisConnections.from_url(redis_url, create_pool=True)
+    kwargs = _parse_redis_url(redis_url)
+    pool = await create_pool(RedisSettings(**kwargs))
     return pool
 
 

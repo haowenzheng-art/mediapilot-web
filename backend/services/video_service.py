@@ -6,12 +6,12 @@ import tempfile
 import logging
 from typing import List
 
-from models.schemas.response import (
+from backend.models.schemas.response import (
     VideoInfo,
     VideoTranscriptResponse,
     TranscriptLine,
 )
-from services.mock_data import MockDataService
+from backend.services.mock_data import MockDataService
 
 logger = logging.getLogger(__name__)
 

@@ -1,10 +1,11 @@
 """
 ARQ Worker 入口
-通过 `arq worker.worker` 或 `python -m backend.worker` 启动
+启动命令: arq backend.worker.Worker
 """
 import asyncio
 import logging
-from arq.connections import RedisConnections, create_pool
+import re
+from arq.connections import RedisSettings, create_pool
 
 from backend.config.settings import settings
 
@@ -12,20 +13,32 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [arq] %(levelname)s 
 logger = logging.getLogger(__name__)
 
 # Redis 连接 URL
+def _parse_redis_url(url: str) -> dict:
+    m = re.match(r'redis://(?:::?)(?:(\w+):(\w+)@)?([^:]+)(?::(\d+))?(?:/(\d+))?', url)
+    if not m:
+        return {}
+    return {
+        "host": m.group(3),
+        "port": int(m.group(4) or "6379"),
+        "database": int(m.group(5) or "0"),
+    }
+
 REDIS_URL = settings.model_dump().get("REDIS_URL") or "redis://localhost:6379/0"
 
 
 async def startup(ctx: dict) -> None:
     """Worker 启动时初始化"""
     logger.info("ARQ Worker 启动中...")
-    ctx["redis"] = await RedisConnections.from_url(REDIS_URL, create_pool=True)
+    kwargs = _parse_redis_url(REDIS_URL)
+    pool = await create_pool(RedisSettings(**kwargs))
+    ctx["redis"] = pool
     logger.info("Redis 连接成功")
 
 
 async def shutdown(ctx: dict) -> None:
     """Worker 关闭时清理"""
     logger.info("ARQ Worker 关闭中...")
-    pool: RedisConnections = ctx.get("redis")
+    pool = ctx.get("redis")
     if pool:
         await pool.close()
 
@@ -34,8 +47,8 @@ class Worker:
     """ARQ Worker 配置"""
 
     functions = [
-        "worker.generate_copywriting_job",
-        "worker.search_trending_job",
+        "backend.worker.generate_copywriting_job",
+        "backend.worker.search_trending_job",
     ]
     startup = startup
     shutdown = shutdown

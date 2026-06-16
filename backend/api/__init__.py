@@ -14,7 +14,7 @@ from backend.utils.api_response import error_response
 from backend.utils.exceptions_typed import DatabaseError
 
 # 导入速率限制
-from middleware.rate_limiting import create_rate_limiting_middleware
+from backend.middleware.rate_limiting import create_rate_limiting_middleware
 
 from backend.config.settings import settings
 
@@ -38,7 +38,6 @@ def global_exception_handler(request: Request, exc: Exception):
 def database_exception_handler(request: Request, exc: DatabaseError):
     """
     数据库异常处理器
-    记录数据库错误并返回统一错误响应
     """
     logger.error(f"数据库错误: {str(exc)}", exc_info=True)
 
@@ -90,6 +89,8 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         from .ai_chat import router as ai_chat_router
         # 任务队列（无需认证）
         from .task_queue import router as task_queue_router
+        # Agent 路由
+        from .agent import router as agent_router
 
         # 设置转写引擎
         if transcribe_engine is not None:
@@ -110,7 +111,6 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         # 任务队列路由
         app.include_router(task_queue_router, prefix="/api/v1")
         # Agent 路由
-        from .agent import router as agent_router
         app.include_router(agent_router, prefix="/api/v1")
 
         # 添加速率限制中间件（开发模式下跳过）

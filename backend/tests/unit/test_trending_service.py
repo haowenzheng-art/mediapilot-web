@@ -3,8 +3,8 @@ Unit tests for TrendingService
 """
 import pytest
 import pytest_asyncio
-from services.trending_service import TrendingService
-from models.schemas.response import HotTopicResponse, TrendingSearchResponse
+from backend.services.trending_service import TrendingService
+from backend.models.schemas.response import HotTopicResponse, TrendingSearchResponse
 
 
 @pytest.mark.asyncio

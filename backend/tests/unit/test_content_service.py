@@ -3,8 +3,8 @@
 """
 import pytest
 import pytest_asyncio
-from services.content_service import ContentService
-from models.schemas.response import ContentGenerateResponse
+from backend.services.content_service import ContentService
+from backend.models.schemas.response import ContentGenerateResponse
 
 
 @pytest.mark.asyncio

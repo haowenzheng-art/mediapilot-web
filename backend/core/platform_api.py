@@ -56,7 +56,7 @@ class HotTopicAPI:
                 "douyin": DouyinScraper(timeout=self.timeout),
                 "xiaohongshu": XiaohongshuScraper(timeout=self.timeout),
             }
-        self.aggregator = HotTopicAggregator()
+        self.aggregator = HotTopicAggregator() if SCRAPERS_AVAILABLE else None
 
     async def close(self):
         """关闭HTTP客户端和爬虫"""

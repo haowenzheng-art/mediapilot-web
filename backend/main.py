@@ -197,9 +197,18 @@ async def startup_event():
     # 初始化 ARQ Redis 连接池
     global arq_pool
     try:
-        from arq.connections import RedisConnections
+        from arq.connections import RedisSettings, create_pool
+        import re
         redis_url = settings.REDIS_URL
-        arq_pool = await RedisConnections.from_url(redis_url, create_pool=True)
+        m = re.match(r'redis://(?:::?)(?:(\w+):(\w+)@)?([^:]+)(?::(\d+))?(?:/(\d+))?', redis_url)
+        kwargs = {}
+        if m:
+            kwargs = {
+                "host": m.group(3),
+                "port": int(m.group(4) or "6379"),
+                "database": int(m.group(5) or "0"),
+            }
+        arq_pool = await create_pool(RedisSettings(**kwargs))
         logger.info(f"ARQ Redis 连接成功: {redis_url}")
     except Exception as e:
         logger.warning(f"ARQ Redis 连接失败: {e}，任务队列不可用")
@@ -258,7 +267,7 @@ async def health_check():
 
 if __name__ == "__main__":
     uvicorn.run(
-        "main:app",
+        "backend.main:app",
         host="0.0.0.0",
         port=8000,
         reload=True

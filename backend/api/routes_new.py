@@ -7,17 +7,17 @@ from fastapi.responses import StreamingResponse
 from typing import Dict, Any
 
 # 使用新的 schemas
-from models.schemas.request import (
+from backend.models.schemas.request import (
     TrendingSearchRequest,
     CompetitorSearchRequest,
     VideoFetchRequest,
     VideoRewriteRequest,
     ContentGenerateRequest,
 )
-from models.schemas.response import APIResponse
+from backend.models.schemas.response import APIResponse
 
 # 导入业务服务
-from services import (
+from backend.services import (
     TrendingService,
     CompetitorService,
     ContentService,
@@ -27,7 +27,7 @@ from services import (
 )
 
 # 导入配置
-from config.settings import settings, get_upload_dir
+from backend.config.settings import settings, get_upload_dir
 
 router = APIRouter(prefix="/api/v1", tags=["MediaPilot API"])
 

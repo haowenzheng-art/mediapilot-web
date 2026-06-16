@@ -5,7 +5,7 @@
 """
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from core.platform_api import (
+from backend.core.platform_api import (
     HotTopicAPI,
     CompetitorAPI,
     PlatformAPIManager,

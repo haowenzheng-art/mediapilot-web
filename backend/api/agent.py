@@ -170,7 +170,7 @@ async def agent_stream(
     )
 
 
-@router.get("/tools", response_model=ToolListResponse)
+@router.get("/tools")
 async def list_tools():
     """获取所有可用工具列表"""
     tools = [t.to_llm_schema() for t in tool_registry.list_tools()]
