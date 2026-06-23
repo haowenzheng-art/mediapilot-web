@@ -27,7 +27,7 @@ class CopywritingService:
             self._repo = CopywritingRepository(db)
         return self._repo
 
-    async def generate(self, request: CopywritingGenerateRequest, db: Session) -> CopywritingResponse:
+    async def generate(self, request: CopywritingGenerateRequest, db: Session, user_id: int) -> CopywritingResponse:
         """异步生成口播文案（支持爬取参考内容）"""
         copywriting_id = str(uuid.uuid4())
 
@@ -72,7 +72,7 @@ class CopywritingService:
             content=content,
             mode=request.mode,
             persona=request.persona,
-            user_id=0  # dev user id，实际应由认证获取
+            user_id=user_id
         )
 
         return result
@@ -159,37 +159,43 @@ xxx
         return None
 
     async def _ai_generate_or_mock(self, prompt: str, request: CopywritingGenerateRequest) -> tuple:
-        """AI 生成或 mock 回退（异步版）"""
-        title = hooks = content = ""
-        if ai_manager.is_available():
-            try:
-                ai_result = await ai_manager.generate(prompt, max_tokens=2000)
-                parsed = self._parse_ai_result(ai_result)
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                content = parsed.get("content", "")
-            except Exception as e:
-                logger.warning(f"AI生成失败: {e}")
-        if not title:
-            title, hooks, content = self._mock_generate(request)
+        """AI 生成（生产路径）
+
+        AI 不可用或失败时抛 RuntimeError，让上层返回明确错误。
+        测试环境可设 settings.USE_MOCK_AI=True 走 _mock_generate 兜底。
+        生产保持 False —— 之前 mock 会返回 "X运营技巧" 这类模板假数据污染用户内容。
+        """
+        if not ai_manager.is_available():
+            from backend.config.settings import settings
+            if not settings.USE_MOCK_AI:
+                raise RuntimeError("AI 服务未配置或不可用，无法生成文案")
+            logger.info("USE_MOCK_AI=True，走 mock 生成")
+            return self._mock_generate(request)
+        ai_result = await ai_manager.generate(prompt, max_tokens=2000)
+        parsed = self._parse_ai_result(ai_result)
+        title = parsed.get("title", "")
+        hooks = parsed.get("hooks", [])
+        content = parsed.get("content", "")
+        if not title and not content:
+            raise RuntimeError("AI 返回为空，请稍后重试")
+        logger.info(f"AI 生成完成 mode={request.mode} title_len={len(title)} content_len={len(content)}")
         return title, hooks, content
 
     async def _ai_rewrite_or_mock(self, prompt: str, original, direction_text: str) -> tuple:
-        """改写时的 AI 生成或 mock 回退（异步版）"""
-        title = hooks = content = ""
-        if ai_manager.is_available():
-            try:
-                ai_result = await ai_manager.generate(prompt, max_tokens=2000)
-                parsed = self._parse_ai_result(ai_result)
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                content = parsed.get("content", "")
-            except Exception as e:
-                logger.warning(f"AI改写失败: {e}")
-        if not title:
-            title = f"{original.title}（{direction_text}）"
-            hooks = original.hooks or []
-            content = f"【{direction_text}版本】\n{original.content}"
+        """改写时的 AI 生成（生产路径）
+
+        失败时直接抛错。改写有原文托底，不需要 mock 模板。
+        """
+        if not ai_manager.is_available():
+            raise RuntimeError("AI 服务未配置或不可用，无法改写")
+        ai_result = await ai_manager.generate(prompt, max_tokens=2000)
+        parsed = self._parse_ai_result(ai_result)
+        title = parsed.get("title", "")
+        hooks = parsed.get("hooks", [])
+        content = parsed.get("content", "")
+        if not title and not content:
+            raise RuntimeError("AI 返回为空，请稍后重试")
+        logger.info(f"AI 改写完成 direction={direction_text} title_len={len(title)}")
         return title, hooks, content
 
     def _build_prompt(self, request: CopywritingGenerateRequest, reference_content: str = "") -> str:

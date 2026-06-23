@@ -34,7 +34,7 @@ class ShootScriptService:
         script_id = str(uuid.uuid4())
 
         # 获取平台配置
-        platform_config = self._get_platform_config(request.platform, request.style)
+        platform_config = self._get_platform_config(request.platform, request.style, request.duration_seconds)
 
         # 构建AI提示词
         prompt = self._build_prompt(request, platform_config)
@@ -46,25 +46,24 @@ class ShootScriptService:
         call_to_action = ""
         tags = []
 
-        if ai_manager.is_available():
-            try:
-                ai_result = await ai_manager.generate(prompt, max_tokens=3000)
-                parsed = self._parse_ai_result(ai_result, request.platform)
-                shots = parsed.get("shots", [])
-                title = parsed.get("title", "")
-                hooks = parsed.get("hooks", [])
-                call_to_action = parsed.get("call_to_action", "")
-                tags = parsed.get("tags", [])
-            except Exception as e:
-                logger.warning(f"AI生成失败: {e}")
-                # 回退到mock
-                pass
-
-        # 如果AI生成失败或不可用，使用mock
-        if not shots:
+        if not ai_manager.is_available():
+            from backend.config.settings import settings
+            if not settings.USE_MOCK_AI:
+                raise RuntimeError("AI 服务未配置或不可用，无法生成拍摄脚本")
             shots, title, hooks, call_to_action, tags = self._mock_generate(
                 request, platform_config
             )
+        else:
+            ai_result = await ai_manager.generate(prompt, max_tokens=3000)
+            parsed = self._parse_ai_result(ai_result, request.platform)
+            shots = parsed.get("shots", [])
+            title = parsed.get("title", "")
+            hooks = parsed.get("hooks", [])
+            call_to_action = parsed.get("call_to_action", "")
+            tags = parsed.get("tags", [])
+
+        if not shots:
+            raise RuntimeError("AI 返回的脚本为空，请稍后重试")
 
         # 计算总时长
         estimated_duration = self._calculate_duration(shots)
@@ -92,8 +91,15 @@ class ShootScriptService:
         """获取脚本"""
         return self._scripts.get(script_id)
 
-    def _get_platform_config(self, platform: PlatformType, style: ScriptStyle) -> dict:
-        """获取平台配置"""
+    def _get_platform_config(self, platform: PlatformType, style: ScriptStyle, duration_seconds: Optional[int] = None) -> dict:
+        """获取平台配置（支持自定义时长：60/120/180 秒）"""
+        # 60s / 120s / 180s 配置（适用于抖音、小红书等竖屏短视频）
+        duration_configs = {
+            60:  {"target_duration": "60秒",  "shot_count": 5,  "shot_duration": "10-15秒"},
+            120: {"target_duration": "120秒", "shot_count": 8,  "shot_duration": "12-18秒"},
+            180: {"target_duration": "180秒", "shot_count": 10, "shot_duration": "15-20秒"},
+        }
+
         configs = {
             PlatformType.DOUYIN: {
                 "orientation": "竖屏",
@@ -117,7 +123,14 @@ class ShootScriptService:
                 "style_prefix": "深度"
             }
         }
-        return configs.get(platform, configs[PlatformType.DOUYIN])
+        cfg = dict(configs.get(platform, configs[PlatformType.DOUYIN]))
+
+        # 抖音 / 小红书 支持自定义 60/120/180 秒
+        if duration_seconds and platform in (PlatformType.DOUYIN, PlatformType.XIAOHONGSHU):
+            dc = duration_configs.get(duration_seconds)
+            if dc:
+                cfg.update(dc)
+        return cfg
 
     def _build_prompt(self, request: ShootScriptRequest, platform_config: dict) -> str:
         """构建AI生成提示词"""
@@ -184,6 +197,14 @@ xxx
             "tags": []
         }
 
+        def _flush(shot):
+            """补齐 Shot 必需字段后压入结果"""
+            if not shot or not shot.get("dialogue"):
+                return
+            shot.setdefault("duration", "0:00-0:00")
+            shot.setdefault("visual_description", "")
+            result["shots"].append(shot)
+
         lines = ai_result.split("\n")
         current_section = None
         current_shot = None
@@ -199,15 +220,24 @@ xxx
             if line.startswith("标题："):
                 result["title"] = line.replace("标题：", "").strip()
             elif line.startswith("钩子"):
+                # 进入钩子段，但当前行（可能是 "钩子（2-3个备选）："）本身不当 hook
                 current_section = "hooks"
             elif line.startswith("分镜头脚本"):
+                # 进入分镜头段，先保存上一镜头
+                _flush(current_shot)
+                current_shot = None
                 current_section = "shots"
             elif line.startswith("行动号召"):
+                # 收尾上一镜头
+                _flush(current_shot)
+                current_shot = None
                 current_section = "cta"
                 result["call_to_action"] = line.replace("行动号召：", "").strip()
             elif line.startswith("标签"):
                 tags_line = line.replace("标签：", "").strip()
-                result["tags"] = [t.strip() for t in tags_line.split("，")]
+                # 兼容中英逗号
+                seps = "，" if "，" in tags_line else ","
+                result["tags"] = [t.strip() for t in tags_line.split(seps) if t.strip()]
             elif current_section == "hooks":
                 hook = line
                 if hook.startswith(("1.", "2.", "3.")):
@@ -217,10 +247,25 @@ xxx
                 # 解析镜头
                 if line.startswith("镜头"):
                     # 新镜头开始
-                    if current_shot and current_shot.get("dialogue"):
-                        result["shots"].append(current_shot)
-                    shot_num = int("".join([c for c in line if c.isdigit()]) or "1")
+                    _flush(current_shot)
+                    # shot_number 只取"镜头"后到第一个非数字字符之间的数字
+                    head = line[len("镜头"):]
+                    num_str = ""
+                    for c in head:
+                        if c.isdigit():
+                            num_str += c
+                        else:
+                            break
+                    shot_num = int(num_str) if num_str else 1
                     current_shot = {"shot_number": shot_num}
+                    # 兼容内联格式 "镜头1 [时长：0:00-0:08]"
+                    if "[" in line and "时长" in line:
+                        try:
+                            inline = line.split("[", 1)[1].rstrip("]")
+                            if "时长" in inline:
+                                current_shot["duration"] = inline.split("时长：", 1)[-1].strip().rstrip("]")
+                        except Exception:
+                            pass
                 elif line.startswith("时长："):
                     duration = line.split("时长：", 1)[1].strip()
                     if current_shot:
@@ -243,8 +288,7 @@ xxx
                         current_shot["camera_movement"] = camera
 
         # 添加最后一个镜头
-        if current_shot and current_shot.get("dialogue"):
-            result["shots"].append(current_shot)
+        _flush(current_shot)
 
         # 如果解析失败，使用mock数据
         if not result["shots"]:

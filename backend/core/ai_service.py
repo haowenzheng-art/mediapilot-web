@@ -350,10 +350,17 @@ class ArkService(AIService):
 class AIServiceManager:
     """AI服务管理器"""
 
+    # Circuit breaker config: 5 consecutive failures → open for 30s
+    _BREAKER_THRESHOLD = 5
+    _BREAKER_COOLDOWN_SEC = 30
+
     def __init__(self):
         self.services: Dict[str, AIService] = {}
         self.current_provider: Optional[str] = None
         self._initialized = False
+        # Circuit breaker state
+        self._consecutive_failures: int = 0
+        self._breaker_open_until: float = 0.0  # epoch seconds
 
     def configure(
         self,
@@ -413,7 +420,14 @@ class AIServiceManager:
             raise RuntimeError("AI服务未配置")
         if not service.is_available():
             raise RuntimeError("AI服务不可用，请检查API密钥配置")
-        return await service.generate(prompt, **kwargs)
+        self._check_breaker()
+        try:
+            result = await service.generate(prompt, **kwargs)
+            self._record_success()
+            return result
+        except Exception:
+            self._record_failure()
+            raise
 
     async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
         """使用当前服务流式生成内容"""
@@ -422,8 +436,34 @@ class AIServiceManager:
             raise RuntimeError("AI服务未配置")
         if not service.is_available():
             raise RuntimeError("AI服务不可用，请检查API密钥配置")
-        async for chunk in service.generate_stream(prompt, **kwargs):
-            yield chunk
+        self._check_breaker()
+        try:
+            async for chunk in service.generate_stream(prompt, **kwargs):
+                yield chunk
+            self._record_success()
+        except Exception:
+            self._record_failure()
+            raise
+
+    def _check_breaker(self):
+        import time
+        if self._breaker_open_until > time.time():
+            wait = int(self._breaker_open_until - time.time())
+            raise RuntimeError(f"AI 服务熔断中（连续 {self._BREAKER_THRESHOLD} 次失败），剩余 {wait}s 冷却")
+
+    def _record_success(self):
+        self._consecutive_failures = 0
+        self._breaker_open_until = 0.0
+
+    def _record_failure(self):
+        import time
+        self._consecutive_failures += 1
+        if self._consecutive_failures >= self._BREAKER_THRESHOLD:
+            self._breaker_open_until = time.time() + self._BREAKER_COOLDOWN_SEC
+            logger.error(
+                f"AI 服务连续 {self._consecutive_failures} 次失败，熔断 "
+                f"{self._BREAKER_COOLDOWN_SEC}s"
+            )
 
     def is_available(self) -> bool:
         """检查当前服务是否可用"""

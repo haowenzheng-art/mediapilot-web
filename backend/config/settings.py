@@ -34,8 +34,25 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "sqlite:///./mediapilot.db"
 
     # ==================== 认证 ====================
+    # 生产环境必须通过环境变量覆盖；DEV_MODE 下允许使用默认值以便本地开发
     JWT_SECRET: str = "dev-secret-key-change-in-production"
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     DEFAULT_QUOTA: int = 100
+
+    @field_validator("JWT_SECRET")
+    @classmethod
+    def _validate_jwt_secret(cls, v: str, info) -> str:
+        # info.data 在 pydantic v2 中可能不含尚未解析的字段，这里改为读取环境变量
+        dev_mode = os.getenv("DEV_MODE", "false").lower() in ("1", "true", "yes")
+        if not dev_mode and v.startswith("dev-secret"):
+            raise ValueError(
+                "JWT_SECRET 必须在生产环境通过环境变量设置为强随机值；当前使用默认开发密钥将被拒绝启动。"
+            )
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET 长度必须 >= 32 字符")
+        return v
 
     # ==================== CORS ====================
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000"
@@ -55,6 +72,9 @@ class Settings(BaseSettings):
     # ==================== 音视频转写 ====================
     TRANSCRIBE_ENGINE: str = "whisper_local"
     USE_MOCK_TRANSCRIBE: bool = False
+    # 测试用：AI 不可用时是否走 _mock_generate 模板兜底
+    # 生产保持 False，让失败显式抛错（不再返回 "X运营技巧" 类假数据）
+    USE_MOCK_AI: bool = False
     WHISPER_MODEL: str = "base"
     WHISPER_LANGUAGE: str = "zh"
 

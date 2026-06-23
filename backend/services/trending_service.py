@@ -90,6 +90,13 @@ class TrendingService:
 
         topics = quota_topics
 
+        # 注入稳定 id（hash(source|title)），前端可作为 hot_topic_id 关联内容库
+        import hashlib
+        for t in topics:
+            if not t.get("id"):
+                key = f"{t.get('source','')}|{t.get('title','')}"
+                t["id"] = hashlib.md5(key.encode("utf-8")).hexdigest()[:16]
+
         hot_topics = [HotTopicResponse(**t) for t in topics]
 
         return TrendingSearchResponse(

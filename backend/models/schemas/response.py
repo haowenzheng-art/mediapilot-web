@@ -42,6 +42,7 @@ class Copywriting(BaseModel):
 
 class HotTopicResponse(BaseModel):
     """热点话题响应"""
+    id: Optional[str] = Field(default=None, description="稳定 ID（hash 自 source+title）")
     title: str
     heat_value: float = Field(description="热度值")
     source: str = Field(description="来源平台")
