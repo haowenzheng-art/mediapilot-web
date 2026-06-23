@@ -18,8 +18,10 @@ if project_dir not in sys.path:
 config = context.config
 
 # 从环境变量读取 DATABASE_URL（通过 .env 文件）
+# 默认 SQLite 路径定位到项目根目录，避免 alembic 在 backend/ 下执行时另开一个空库
 if not config.get_main_option("sqlalchemy.url"):
-    db_url = os.getenv("DATABASE_URL", "sqlite:///./mediapilot.db")
+    default_sqlite = f"sqlite:///{os.path.join(project_dir, 'mediapilot.db')}"
+    db_url = os.getenv("DATABASE_URL", default_sqlite)
     config.set_main_option("sqlalchemy.url", db_url)
 
 # Interpret the config file for Python logging.

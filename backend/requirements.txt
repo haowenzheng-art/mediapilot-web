@@ -1,4 +1,4 @@
-# MediaPilot 依赖�?
+# MediaPilot 依赖�?
 
 # 后端依赖
 fastapi>=0.104.0
@@ -8,11 +8,13 @@ python-multipart>=0.0.6
 requests>=2.31.0
 httpx>=0.25.0
 
-# 数据�?
+# 数据�?
 sqlalchemy>=2.0.0
 alembic>=1.12.0
+# PostgreSQL 生产依赖（DATABASE_URL=postgresql://... 时需要）
+psycopg2-binary>=2.9.9
 
-# 桌面端依�?
+# 桌面端依�?
 PyQt5>=5.15.0
 
 # 数据处理
@@ -28,7 +30,7 @@ openai-whisper>=20231117
 torch>=2.0.0
 tqdm>=4.65.0
 
-# 认证和安�?
+# 认证和安�?
 bcrypt>=4.0.0
 PyJWT>=2.8.0
 
@@ -42,7 +44,7 @@ aiohttp>=3.9.0
 fake-useragent>=1.4.0
 playwright>=1.40.0
 
-# 文本相似度计�?
+# 文本相似度计�?
 jieba>=0.42.0
 
 # 任务队列
