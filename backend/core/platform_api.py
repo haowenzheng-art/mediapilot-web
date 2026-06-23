@@ -15,15 +15,23 @@ logger = logging.getLogger(__name__)
 
 # 导入爬虫
 try:
-    from scrapers.baidu_news import BaiduNewsScraper
-    from scrapers.weibo import WeiboScraper
-    from scrapers.zhihu import ZhihuScraper
-    from scrapers.douyin import DouyinScraper
-    from scrapers.xiaohongshu import XiaohongshuScraper
-    from scrapers.aggregator import HotTopicAggregator
+    from backend.scrapers.baidu_news import BaiduNewsScraper
+    from backend.scrapers.weibo import WeiboScraper
+    from backend.scrapers.zhihu import ZhihuScraper
+    from backend.scrapers.douyin import DouyinScraper
+    from backend.scrapers.xiaohongshu import XiaohongshuScraper
+    from backend.scrapers.aggregator import HotTopicAggregator
+    from backend.scrapers.toutiao_search import ToutiaoSearchScraper
+    from backend.scrapers.sixtys import (
+        SixtysWeiboScraper,
+        SixtysZhihuScraper,
+        SixtysDouyinScraper,
+        SixtysToutiaoScraper,
+        SixtysXiaohongshuScraper,
+    )
     SCRAPERS_AVAILABLE = True
-except ImportError:
-    logger.warning("爬虫模块不可用，将使用mock数据")
+except ImportError as e:
+    logger.warning(f"爬虫模块不可用，将使用mock数据: {e}")
     SCRAPERS_AVAILABLE = False
 
 
@@ -47,14 +55,20 @@ class HotTopicAPI:
         self.client = httpx.AsyncClient(timeout=self.timeout)
 
         # 初始化爬虫
+        # 数据源选择原则：
+        # - baidu/toutiao：真实关键词搜索，冷词也能命中
+        # - weibo/zhihu：60s TOP 50 热榜，关键词命中则返回，否则空（已有 baidu 兜底）
+        # - douyin/xiaohongshu：60s 热榜 + fallback_when_empty=True
+        #   关键词 0 命中时退回 TOP 15 当作"今日热点"，避免这两大平台永远空
         self.scrapers = {}
         if SCRAPERS_AVAILABLE:
             self.scrapers = {
                 "baidu": BaiduNewsScraper(timeout=self.timeout),
-                "weibo": WeiboScraper(timeout=self.timeout),
-                "zhihu": ZhihuScraper(timeout=self.timeout),
-                "douyin": DouyinScraper(timeout=self.timeout),
-                "xiaohongshu": XiaohongshuScraper(timeout=self.timeout),
+                "toutiao": ToutiaoSearchScraper(timeout=self.timeout),
+                "weibo": SixtysWeiboScraper(timeout=self.timeout),
+                "zhihu": SixtysZhihuScraper(timeout=self.timeout),
+                "douyin": SixtysDouyinScraper(timeout=self.timeout),
+                "xiaohongshu": SixtysXiaohongshuScraper(timeout=self.timeout),
             }
         self.aggregator = HotTopicAggregator() if SCRAPERS_AVAILABLE else None
 
@@ -82,54 +96,52 @@ class HotTopicAPI:
             热点话题列表
         """
         results = []
+        degraded: List[str] = []
 
-        # 平台映射
+        # 平台映射：前端传入 -> 内部 scraper key 列表
+        # baidu 被选时同时跑 baidu+toutiao 两源（都是关键词驱动），保证关键词一定有结果
+        # weibo/zhihu 走 60s 热榜过滤，冷门词可能 0 命中（这是数据源限制，非 bug）
+        # douyin/xiaohongshu 0 命中时 fallback 到 TOP 热榜（见 SixtysXxxScraper.fallback_when_empty）
         platform_map = {
-            "baidu": "baidu",
-            "weibo": "weibo",
-            "zhihu": "zhihu",
-            "douyin": "douyin",
-            "xiaohongshu": "xiaohongshu",
+            "baidu": ["baidu", "toutiao"],
+            "weibo": ["weibo"],
+            "zhihu": ["zhihu"],
+            "douyin": ["douyin"],
+            "toutiao": ["toutiao"],
+            "xiaohongshu": ["xiaohongshu"],
         }
 
         for platform in platforms:
-            mapped_platform = platform_map.get(platform, platform)
+            mapped_keys = platform_map.get(platform, [platform])
 
-            if SCRAPERS_AVAILABLE and mapped_platform in self.scrapers:
+            available_keys = [k for k in mapped_keys if SCRAPERS_AVAILABLE and k in self.scrapers]
+            if not available_keys:
+                logger.warning(f"平台 [{platform}] 暂无可用真实数据源，标记为 degraded")
+                degraded.append(platform)
+                continue
+
+            any_success = False
+            for key in available_keys:
+                scraper = self.scrapers[key]
                 try:
-                    scraper = self.scrapers[mapped_platform]
                     topics = await scraper.search(keyword, days)
-                    results.extend(topics)
+                    if topics:
+                        results.extend(topics)
+                        any_success = True
+                    else:
+                        logger.info(f"{platform}/{key} 关键词 [{keyword}] 无结果")
                 except Exception as e:
-                    logger.warning(f"{platform}爬虫获取失败: {e}")
-            else:
-                # 回退到mock数据
-                if platform == "weibo":
-                    try:
-                        topics = await self._fetch_weibo_trending(keyword, days)
-                        results.extend(topics)
-                    except Exception as e:
-                        logger.warning(f"微博热搜获取失败: {e}")
-                elif platform == "douyin":
-                    try:
-                        topics = await self._fetch_douyin_trending(keyword, days)
-                        results.extend(topics)
-                    except Exception as e:
-                        logger.warning(f"抖音热点获取失败: {e}")
-                elif platform == "xiaohongshu":
-                    try:
-                        topics = await self._fetch_xiaohongshu_trending(keyword, days)
-                        results.extend(topics)
-                    except Exception as e:
-                        logger.warning(f"小红书热点获取失败: {e}")
-                elif platform == "baidu":
-                    results.extend(self._mock_hot_topics(keyword, "百度新闻", days))
-                elif platform == "zhihu":
-                    results.extend(self._mock_hot_topics(keyword, "知乎热榜", days))
+                    logger.warning(f"{platform}/{key} 真实数据源失败: {type(e).__name__}: {e}")
+
+            if not any_success:
+                degraded.append(platform)
+
+        if degraded:
+            logger.warning(f"本次搜索 degraded 平台: {degraded}")
 
         # 聚合和去重
         if SCRAPERS_AVAILABLE and results:
-            results = self.aggregator.aggregate(results, max_count=10)
+            results = self.aggregator.aggregate(results, max_count=30)
 
         return results
 
@@ -193,18 +205,19 @@ class HotTopicAPI:
         platform: str,
         days: int
     ) -> List[Dict[str, Any]]:
-        """生成模拟热点数据"""
+        """生成模拟热点数据（小红书等暂无真实数据源时使用，URL 走真实搜索页）"""
         import random
+        from urllib.parse import quote
 
-        # 平台中文名映射
-        platform_names = {
-            "weibo": "微博热搜",
-            "douyin": "抖音热榜",
-            "xiaohongshu": "小红书",
-            "baidu": "百度新闻",
-            "zhihu": "知乎热榜",
+        # 平台中文名 + 真实搜索 URL 模板
+        platform_meta = {
+            "weibo":       ("微博热搜", "https://s.weibo.com/weibo?q={q}"),
+            "douyin":      ("抖音热榜", "https://www.douyin.com/search/{q}"),
+            "xiaohongshu": ("小红书",   "https://www.xiaohongshu.com/search_result?keyword={q}"),
+            "baidu":       ("百度新闻", "https://www.baidu.com/s?wd={q}&tn=news"),
+            "zhihu":       ("知乎热榜", "https://www.zhihu.com/search?type=content&q={q}"),
         }
-        source_name = platform_names.get(platform, platform)
+        source_name, url_tpl = platform_meta.get(platform, (platform, "https://www.google.com/search?q={q}"))
 
         topics = [
             f"{keyword}行业新趋势",
@@ -227,7 +240,7 @@ class HotTopicAPI:
                 "source": source_name,
                 "trend_direction": random.choice(["up", "down", "same"]),
                 "summary": f"这是关于{title}的热点摘要...",
-                "source_url": f"https://example.com/topic/{i}",
+                "source_url": url_tpl.format(q=quote(title)),
                 "published_at": datetime.now() - timedelta(days=random.randint(0, days)),
                 "crawled_at": datetime.now(),
                 "category": "综合",
