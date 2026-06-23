@@ -9,7 +9,7 @@
 """
 import logging
 import json
-from sqlalchemy import Column, String, Integer, Text, DateTime, TypeDecorator, Boolean, Index, ForeignKey
+from sqlalchemy import Column, String, Integer, Text, DateTime, TypeDecorator, Boolean, Index, ForeignKey, JSON
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from typing import Optional
@@ -81,6 +81,9 @@ class UserTable(Base):
     is_active = Column(Boolean, nullable=False, default=True)
     is_admin = Column(Boolean, nullable=False, default=False)
 
+    # 用户偏好（theme/language/notification 等），存 JSON
+    preferences = Column(JSON, nullable=True)
+
     # 创建时间戳
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, onupdate=func.now())
@@ -131,7 +134,7 @@ class SubscriptionTable(Base):
     last_pushed_at = Column(DateTime, nullable=True)
     next_push_at = Column(DateTime, nullable=True, index=True)
     created_at = Column(DateTime, server_default=func.now())
-    updated_at = Column(DateTime, onupdate=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
     # 定义关系
     user = relationship("UserTable")
