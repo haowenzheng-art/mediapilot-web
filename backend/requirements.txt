@@ -50,3 +50,6 @@ jieba>=0.42.0
 # 任务队列
 arq>=0.23.0
 redis>=4.5.0
+
+# 可观测性（可选）：SENTRY_DSN 环境变量为空时不会启用
+sentry-sdk[fastapi]>=1.40.0

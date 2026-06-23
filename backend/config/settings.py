@@ -101,6 +101,14 @@ class Settings(BaseSettings):
     # ==================== 任务队列 ====================
     REDIS_URL: str = "redis://localhost:6379/0"
 
+    # ==================== 可观测性 ====================
+    # Sentry DSN：空字符串则不启用，避免 dev 误报
+    SENTRY_DSN: str = ""
+    SENTRY_ENVIRONMENT: str = "development"
+    SENTRY_TRACES_SAMPLE_RATE: float = 0.1
+    # 日志轮转保留天数
+    LOG_RETENTION_DAYS: int = 7
+
     # ==================== 辅助方法 ====================
 
     @property

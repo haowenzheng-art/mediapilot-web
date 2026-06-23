@@ -2,21 +2,55 @@
 MediaPilot 后端API服务入口
 """
 import sys
+import os
+import asyncio
 import logging
+import time
+from logging.handlers import TimedRotatingFileHandler
 
 # 导入 settings（pydantic-settings 自动加载 .env）
 from backend.config.settings import settings
 
-# 配置日志系统
+# 配置日志系统：按日切割 + 保留 N 天，避免 backend.log 无限增长
+os.makedirs("logs", exist_ok=True)
+_log_handlers: list[logging.Handler] = [logging.StreamHandler(sys.stdout)]
+try:
+    _rot = TimedRotatingFileHandler(
+        filename="logs/backend.log",
+        when="midnight",
+        backupCount=settings.LOG_RETENTION_DAYS,
+        encoding="utf-8",
+        utc=False,
+    )
+    _rot.suffix = "%Y-%m-%d"
+    _log_handlers.append(_rot)
+except Exception as _e:
+    # 日志目录不可写也不应阻塞启动
+    print(f"[main] rotating log handler init failed: {_e}", file=sys.stderr)
+
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO),
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('backend.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
+    handlers=_log_handlers,
 )
 logger = logging.getLogger(__name__)
+
+# Sentry：仅当配置了 DSN 时启用，避免 dev 误上报
+if settings.SENTRY_DSN:
+    try:
+        import sentry_sdk
+        from sentry_sdk.integrations.fastapi import FastApiIntegration
+        from sentry_sdk.integrations.starlette import StarletteIntegration
+        sentry_sdk.init(
+            dsn=settings.SENTRY_DSN,
+            environment=settings.SENTRY_ENVIRONMENT,
+            traces_sample_rate=settings.SENTRY_TRACES_SAMPLE_RATE,
+            integrations=[StarletteIntegration(), FastApiIntegration()],
+            send_default_pii=False,
+        )
+        logger.info(f"Sentry 已启用: env={settings.SENTRY_ENVIRONMENT}")
+    except Exception as e:
+        logger.warning(f"Sentry 初始化失败（不影响启动）: {e}")
 
 from fastapi import FastAPI, Request, status, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -51,6 +85,44 @@ transcribe_engine = None
 
 # ARQ Redis 连接池
 arq_pool = None
+# 重连锁 + 退避（防止 Redis 真挂时并发请求刷爆日志）
+_arq_reconnect_lock = asyncio.Lock()
+_arq_last_fail_ts: float = 0.0
+_ARQ_RECONNECT_BACKOFF = 3.0  # 失败后 3s 内不再尝试重连
+
+
+async def get_arq_pool():
+    """获取 ARQ Redis 连接池，None 时尝试 lazy 重连。
+
+    生产场景：Redis 短暂网络抖动恢复后，startup 时建立的 pool 已是 None，
+    请求路径调用本函数即可触发重连，无需重启 backend。
+    """
+    global arq_pool, _arq_last_fail_ts
+    if arq_pool is not None:
+        return arq_pool
+
+    # 失败退避：上次失败后 _ARQ_RECONNECT_BACKOFF 秒内直接放弃
+    now = time.monotonic()
+    if now - _arq_last_fail_ts < _ARQ_RECONNECT_BACKOFF:
+        return None
+
+    async with _arq_reconnect_lock:
+        if arq_pool is not None:  # double-check after lock
+            return arq_pool
+        try:
+            from arq.connections import RedisSettings, create_pool
+            from backend.worker import _parse_redis_url
+            kwargs = _parse_redis_url(settings.REDIS_URL) or {"host": "localhost", "port": 6379, "database": 0}
+            arq_pool = await create_pool(RedisSettings(**kwargs))
+            await arq_pool.ping()
+            logger.info(f"ARQ Redis lazy 重连成功: {settings.REDIS_URL}")
+            _arq_last_fail_ts = 0.0
+            return arq_pool
+        except Exception as e:
+            _arq_last_fail_ts = time.monotonic()
+            logger.warning(f"ARQ Redis lazy 重连失败: {e}，{_ARQ_RECONNECT_BACKOFF}s 后再试")
+            arq_pool = None
+            return None
 
 # APScheduler 实例
 scheduler = BackgroundScheduler()
@@ -102,19 +174,26 @@ async def database_exception_handler(request: Request, exc: DatabaseError):
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
     )
 
-# CORS配置（开发模式放宽，生产模式使用 CORS_ORIGINS 指定的源）
+# CORS 配置：开发模式允许 localhost 系列；生产必须显式列出
 if settings.DEV_MODE:
-    cors_origins = ["*"]
+    cors_origins = ["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173"]
 else:
     cors_origins = settings.cors_origins_list
+    if not cors_origins:
+        raise RuntimeError("生产环境必须配置 CORS_ORIGINS，不允许为空")
 
+# 当 allow_credentials=True 时，allow_origins 不能为 ["*"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "X-Request-ID"],
 )
+
+# 请求 ID + 访问日志中间件
+from backend.middleware.request_id import create_request_id_middleware
+app.middleware("http")(create_request_id_middleware())
 
 # 注册路由
 register_routes(app, transcribe_engine)
@@ -194,22 +273,23 @@ async def startup_event():
         logger.warning(f"转写引擎初始化失败: {e}，使用mock模式")
         transcribe_engine = None
 
+    # 将真实初始化好的转写引擎注入到 media 路由（register_routes 在模块加载时执行，
+    # 那时 transcribe_engine 还是 None，必须在 startup 完成初始化后再注入一次）
+    try:
+        from backend.api.media import set_transcribe_engine
+        set_transcribe_engine(transcribe_engine)
+        logger.info(f"已将转写引擎注入 media 路由: {transcribe_engine.engine_type if transcribe_engine else 'None'}")
+    except Exception as e:
+        logger.warning(f"转写引擎注入 media 路由失败: {e}")
+
     # 初始化 ARQ Redis 连接池
     global arq_pool
     try:
         from arq.connections import RedisSettings, create_pool
-        import re
-        redis_url = settings.REDIS_URL
-        m = re.match(r'redis://(?:::?)(?:(\w+):(\w+)@)?([^:]+)(?::(\d+))?(?:/(\d+))?', redis_url)
-        kwargs = {}
-        if m:
-            kwargs = {
-                "host": m.group(3),
-                "port": int(m.group(4) or "6379"),
-                "database": int(m.group(5) or "0"),
-            }
+        from backend.worker import _parse_redis_url
+        kwargs = _parse_redis_url(settings.REDIS_URL) or {"host": "localhost", "port": 6379, "database": 0}
         arq_pool = await create_pool(RedisSettings(**kwargs))
-        logger.info(f"ARQ Redis 连接成功: {redis_url}")
+        logger.info(f"ARQ Redis 连接成功: {settings.REDIS_URL}")
     except Exception as e:
         logger.warning(f"ARQ Redis 连接失败: {e}，任务队列不可用")
         arq_pool = None
@@ -235,10 +315,23 @@ async def startup_event():
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """应用关闭时停止调度器"""
+    """应用关闭时释放所有资源：调度器、Redis 连接池、数据库连接池"""
     if scheduler.running:
         scheduler.shutdown(wait=False)
         logger.info("APScheduler 已停止")
+
+    global arq_pool
+    if arq_pool is not None:
+        try:
+            await arq_pool.close()
+            logger.info("ARQ Redis 连接池已关闭")
+        except Exception as e:
+            logger.error(f"ARQ Redis 连接池关闭失败: {e}")
+        finally:
+            arq_pool = None
+
+    from backend.config.database import dispose_engine
+    dispose_engine()
 
 @app.get("/")
 async def root():
@@ -252,16 +345,61 @@ async def root():
 
 @app.get("/health")
 async def health_check():
-    """健康检查"""
+    """健康检查：真实探测 DB 与 Redis 连通性"""
+    db_ok = False
+    redis_ok = False
+    try:
+        from backend.config.database import SessionLocal
+        db = SessionLocal()
+        try:
+            db.execute(__import__("sqlalchemy").text("SELECT 1"))
+            db_ok = True
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning(f"健康检查 DB 探测失败: {e}")
+
+    if arq_pool is not None:
+        try:
+            await arq_pool.ping()
+            redis_ok = True
+        except Exception as e:
+            logger.warning(f"健康检查 Redis 探测失败: {e}")
+
+    all_ok = db_ok and redis_ok
     return {
-        "status": "healthy",
+        "status": "healthy" if all_ok else "degraded",
         "version": "1.0.0",
         "services": {
             "api": "running",
-            "database": "connected",
+            "database": "connected" if db_ok else "disconnected",
+            "redis": "connected" if redis_ok else "disconnected",
             "ai_service": ai_manager.is_available(),
-            "transcribe_engine": transcribe_engine.engine_type if transcribe_engine else None
-        }
+            "transcribe_engine": transcribe_engine.engine_type if transcribe_engine else None,
+        },
+    }
+
+
+@app.get("/queue/health")
+async def queue_health():
+    """ARQ 队列健康：Redis ping + 注册的 worker functions 数量"""
+    pool = await get_arq_pool()
+    if pool is None:
+        return {"status": "down", "redis": "disconnected", "reason": "ARQ pool unavailable"}
+    try:
+        await pool.ping()
+    except Exception as e:
+        logger.warning(f"queue health redis ping 失败: {e}")
+        return {"status": "down", "redis": "ping_failed", "error": str(e)}
+
+    from backend.worker import Worker as _W
+    fns = [getattr(f, "__name__", str(f)) for f in (_W.functions or [])]
+    return {
+        "status": "ok",
+        "redis": "connected",
+        "registered_functions": fns,
+        "max_jobs": _W.max_jobs,
+        "job_timeout": _W.job_timeout,
     }
 
 
