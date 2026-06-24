@@ -4,7 +4,7 @@ API 响应模型定义
 """
 from typing import List, Optional, Any
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 class APIResponse(BaseModel):
     """统一API响应格式"""
@@ -54,6 +54,19 @@ class HotTopicResponse(BaseModel):
     crawled_at: Optional[datetime] = Field(default=None, description="爬取时间")
     keywords: Optional[str] = Field(default=None, description="关键词")
     image_url: Optional[str] = Field(default=None, description="配图URL")
+    is_today: bool = Field(default=False, description="是否为今日热点（前端展示 today 徽章）")
+
+    @model_validator(mode="after")
+    def _compute_is_today(self):
+        ts = self.published_at or self.crawled_at
+        if ts is None:
+            return self
+        today = datetime.utcnow().date()
+        try:
+            self.is_today = ts.date() == today
+        except Exception:
+            pass
+        return self
 
     class Config:
         populate_by_name = True  # 允许使用 url 作为 source_url 的别名
