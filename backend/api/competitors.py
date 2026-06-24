@@ -106,15 +106,21 @@ async def export_competitors(
 
         if format == "csv":
             media_type = "text/csv"
-            filename = f"competitors_{niche}.csv"
+            ext = "csv"
         else:
             media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-            filename = f"competitors_{niche}.xlsx"
+            ext = "xlsx"
 
+        # RFC 5987: 中文文件名 URL-encode 后放进 filename*=UTF-8''…
+        from urllib.parse import quote
+        filename = f"competitors_{niche}.{ext}"
+        encoded = quote(filename)
         return Response(
             content=file_content,
             media_type=media_type,
-            headers={"Content-Disposition": f"attachment; filename={filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename=competitors.{ext}; filename*=UTF-8''{encoded}"
+            }
         )
     except ValueError as e:
         raise HTTPException(

@@ -43,6 +43,9 @@ class CompetitorService:
         Returns:
             对标账号搜索响应
         """
+        from backend.config.settings import settings
+        is_demo = not (settings.XINBANG_API_KEY or settings.HUITUN_API_KEY)
+
         try:
             # 优先使用平台API
             accounts = await self.platform_api.search_competitors(
@@ -56,6 +59,18 @@ class CompetitorService:
             # API调用失败，降级到mock数据
             import logging
             logging.warning(f"平台API调用失败，使用mock数据: {e}")
+            is_demo = True
+            accounts = self.mock_data.search_competitors(
+                niche=niche,
+                platforms=platforms,
+                min_followers=min_followers,
+                max_followers=max_followers,
+                min_avg_likes=min_avg_likes
+            )
+
+        if not accounts:
+            # 平台API空结果时也走mock以提供演示数据
+            is_demo = True
             accounts = self.mock_data.search_competitors(
                 niche=niche,
                 platforms=platforms,
@@ -69,7 +84,8 @@ class CompetitorService:
         return CompetitorSearchResponse(
             niche=niche,
             total_count=len(competitor_accounts),
-            competitors=competitor_accounts
+            competitors=competitor_accounts,
+            is_demo=is_demo,
         )
 
     async def export_excel(self, niche: str) -> Iterator[bytes]:

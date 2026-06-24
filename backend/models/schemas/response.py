@@ -113,6 +113,7 @@ class CompetitorSearchResponse(BaseModel):
     niche: str
     total_count: int
     competitors: List[Any]
+    is_demo: bool = False
 
 
 class TrendingSearchResponse(BaseModel):
