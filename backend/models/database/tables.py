@@ -239,3 +239,26 @@ class HotTopicTrendTable(Base):
         Index('idx_trend_recorded', 'recorded_at'),
         Index('idx_trend_topic_time', 'hot_topic_id', 'recorded_at'),
     )
+
+
+class CalendarEventTable(Base):
+    """日历事件表（用户内容发布计划）"""
+    __tablename__ = "calendar_events"
+
+    id = Column(Integer, primary_key=True, autoincrement=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    title = Column(String(200), nullable=False)
+    content = Column(Text, nullable=True)
+    scheduled_date = Column(DateTime, nullable=False, index=True)
+    platform = Column(String(50), nullable=True, index=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    # 可选：关联内容库已有的文案/脚本
+    content_ref_id = Column(Integer, nullable=True, index=True)
+
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    __table_args__ = (
+        Index('idx_calendar_user_date', 'user_id', 'scheduled_date'),
+        Index('idx_calendar_user_status', 'user_id', 'status'),
+    )

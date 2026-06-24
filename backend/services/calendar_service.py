@@ -89,7 +89,7 @@ class CalendarService:
         ).first()
 
         if event:
-            return CalendarEventResponse(**event.__dict__)
+            return CalendarEventResponse.model_validate(event)
         return None
 
     def get_events(
@@ -143,7 +143,7 @@ class CalendarService:
         events = query.offset(offset).limit(per_page).all()
 
         return (
-            [CalendarEventResponse(**event.__dict__) for event in events],
+            [CalendarEventResponse.model_validate(event) for event in events],
             total
         )
 
@@ -177,7 +177,7 @@ class CalendarService:
             CalendarEventTable.scheduled_date
         ).all()
 
-        return [CalendarEventResponse(**event.__dict__) for event in events]
+        return [CalendarEventResponse.model_validate(event) for event in events]
 
     def update_event(
         self,
@@ -228,7 +228,7 @@ class CalendarService:
 
             logger.info(f"更新日历事件成功: event_id={event_id}")
 
-            return CalendarEventResponse(**event.__dict__)
+            return CalendarEventResponse.model_validate(event)
 
     def delete_event(
         self,

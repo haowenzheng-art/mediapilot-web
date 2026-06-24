@@ -87,6 +87,7 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         from .content_library import router as content_library_router
         from .preferences import router as preferences_router
         from .analytics import router as analytics_router
+        from .calendar import router as calendar_router
         # AI Chat 路由（无需认证）
         from .ai_chat import router as ai_chat_router
         # 任务队列（无需认证）
@@ -111,6 +112,7 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         app.include_router(content_library_router, prefix="/api/v1")
         app.include_router(preferences_router, prefix="/api/v1")
         app.include_router(analytics_router, prefix="/api/v1")
+        app.include_router(calendar_router, prefix="/api/v1")
         # AI Chat 路由由 main.py 处理
         # 任务队列路由
         app.include_router(task_queue_router, prefix="/api/v1")

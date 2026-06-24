@@ -19,6 +19,28 @@ from backend.models.schemas.api_response import ErrorCode
 router = APIRouter(prefix="/calendar", tags=["日历"])
 
 
+@router.get("/health")
+def health():
+    return success_response(data={"status": "ok"})
+
+
+@router.get("/events/upcoming")
+async def get_upcoming_events(
+    current_user: UserTable = Depends(get_current_user),
+    db: Session = Depends(get_db),
+    days: Optional[int] = Query(7, ge=1, le=90, description="未来天数")
+):
+    """获取未来指定天数内的日历事件"""
+    try:
+        events = calendar_service.get_upcoming_events(db, current_user.id, days)
+        return success_response(data=events, message=f"获取即将到来事件成功")
+    except Exception as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"获取即将到来事件失败: {str(e)}"
+        )
+
+
 @router.post("/events", status_code=status.HTTP_201_CREATED)
 async def create_event(
     event_data: CalendarEventCreate,
@@ -212,31 +234,4 @@ async def delete_event(
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
             message=f"删除事件失败: {str(e)}"
-        )
-
-
-@router.get("/events/upcoming")
-async def get_upcoming_events(
-    current_user: UserTable = Depends(get_current_user),
-    db: Session = Depends(get_db),
-    days: Optional[int] = Query(7, ge=1, le=90, description="未来天数")
-):
-    """
-    获取未来指定天数内的日历事件
-
-    - days: 未来天数（默认7天，最大90天）
-
-    需要认证
-    """
-    try:
-        events = calendar_service.get_upcoming_events(db, current_user.id, days)
-
-        return success_response(
-            data=events,
-            message=f"获取即将到来事件成功"
-        )
-    except Exception as e:
-        return error_response(
-            code=ErrorCode.INTERNAL_ERROR,
-            message=f"获取即将到来事件失败: {str(e)}"
         )
