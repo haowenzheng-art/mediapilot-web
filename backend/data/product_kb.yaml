@@ -1,0 +1,95 @@
+# MediaPilot 产品知识库
+# 字段:
+#   id          短编号，便于引用
+#   question    用户可能问的问题（关键词列表用于匹配）
+#   keywords    触发匹配的关键词（小写、去标点）
+#   answer      简短回答
+#   action_url  可选，前端跳转目标（hash/path）
+#   action_text 跳转按钮文案
+
+faqs:
+  - id: trending-search
+    question: 如何搜索全网热点
+    keywords: [热点, 热搜, 搜索热点, 全网热点, trending, 热点搜索]
+    answer: |
+      去「热点搜索」页输入关键词，系统会从百度新闻、微博、知乎、抖音、小红书等抓取最新 10 条热点，每条带摘要、热度、趋势方向。
+    action_url: /trending
+    action_text: 前往热点搜索
+
+  - id: subscribe-topic
+    question: 如何订阅一个话题
+    keywords: [订阅, 话题订阅, 自动推送, 关注话题, subscribe]
+    answer: |
+      在「话题订阅」页点「新建订阅」，填话题名、描述、频率（每日 / 每3天）。每天 08:00 系统自动扫描新热点并推送到推送记录，订阅会扣 1 配额。
+    action_url: /subscription
+    action_text: 前往话题订阅
+
+  - id: copywriting-modes
+    question: 口播文案有哪些生成模式
+    keywords: [文案, 口播, 口播文案, 写文案, 改写, 洗稿, copywriting]
+    answer: |
+      三种模式：(1) 从0到1：话题+人设直接生成；(2) 热点框架：选一条热点+人设生成；(3) 改写：贴入旧文案+人设洗稿。生成后可点「再改改」让文案更口语、加情绪或加观点。
+    action_url: /copywriting
+    action_text: 前往口播文案
+
+  - id: shoot-script
+    question: 如何生成拍摄脚本
+    keywords: [脚本, 分镜, 拍摄脚本, 拍摄, shoot, script]
+    answer: |
+      去「拍摄脚本」页选平台（抖音60s/小红书3min/B站5-10min）+ 风格（激情/轻松/专业），输入主题和人设就能生成完整分镜（编号/时长/画面/台词/运镜）。支持导出 json/txt/csv。
+    action_url: /shoot-script
+    action_text: 前往拍摄脚本
+
+  - id: content-library
+    question: 内容库是什么用的
+    keywords: [内容库, 内容追踪, 归档, library, 历史内容]
+    answer: |
+      生成的文案和脚本会自动登记入库，按热点 ID 串联。给一个热点 ID 可以反查它催生的全部文案/脚本，方便复盘哪条热点效果好。
+    action_url: /content-library
+    action_text: 前往内容库
+
+  - id: transcribe
+    question: 音视频如何转写
+    keywords: [转写, 语音, 视频转文字, 转录, transcribe, whisper]
+    answer: |
+      上传音频或视频文件到「智能转录」页，后台用 Whisper 转写，任务完成后可以看完整逐字稿、时间戳和大纲。文件转写消耗 1 配额。
+    action_url: /transcription
+    action_text: 前往智能转录
+
+  - id: quota
+    question: 配额怎么算
+    keywords: [配额, 额度, 余额, 扣费, quota]
+    answer: |
+      新用户注册送 100 配额。文案生成、脚本生成、订阅创建、热点搜索、转写各扣 1。可以在「设置」里查看当前余额。
+
+  - id: settings-preferences
+    question: 如何修改主题语言等设置
+    keywords: [设置, 偏好, 主题, 语言, theme, language, settings, 暗色, 亮色]
+    answer: |
+      去「设置」页可以切换主题（dark/light/auto）、语言（zh-CN/en-US）、默认平台、是否通知。设置保存在服务器和本地，登录后跨设备同步。
+    action_url: /settings
+    action_text: 前往设置
+
+  - id: analytics
+    question: 怎么看数据看板
+    keywords: [数据, 看板, 分析, analytics, dashboard, 统计]
+    answer: |
+      「数据看板」页展示最近 30 天活跃数据：总文案数、脚本数、未读推送、订阅数；每日生成趋势；内容类型分布；Top 5 热点话题。
+    action_url: /analytics
+    action_text: 前往数据看板
+
+  - id: calendar
+    question: 发布日历怎么用
+    keywords: [日历, 发布, 排期, 计划, calendar, schedule]
+    answer: |
+      「发布日历」按计划日期管理内容发布事件，可以筛选时间范围/状态/平台，支持「即将到来」视图（默认未来 7 天）。状态有 pending / in_progress / completed / cancelled。
+    action_url: /calendar
+    action_text: 前往发布日历
+
+  - id: competitors
+    question: 怎么找对标账号
+    keywords: [对标, 同行, 账号, competitor, 标杆]
+    answer: |
+      「对标账号」页输入赛道+平台+粉丝区间，返回符合条件的账号列表（账号名/平台/粉丝/平均点赞/简介）。无第三方 API 时返回 demo 数据，列表会标 "demo" 徽章。
+    action_url: /competitors
+    action_text: 前往对标账号

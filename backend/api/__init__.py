@@ -115,7 +115,8 @@ def register_routes(app: FastAPI, transcribe_engine=None):
         app.include_router(analytics_router, prefix="/api/v1")
         app.include_router(calendar_router, prefix="/api/v1")
         app.include_router(competitors_router, prefix="/api/v1")
-        # AI Chat 路由由 main.py 处理
+        # AI Chat & 产品教程
+        app.include_router(ai_chat_router, prefix="/api/v1")
         # 任务队列路由
         app.include_router(task_queue_router, prefix="/api/v1")
         # Agent 路由

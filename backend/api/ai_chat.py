@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 from backend.core.ai_service import ai_manager
+from backend.services.product_tutor_service import product_tutor_service
 
 router = APIRouter(prefix="/ai", tags=["AI Chat"])
 
@@ -102,3 +103,45 @@ async def chat_stream_endpoint(request: ChatRequest):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache"}
     )
+
+
+# ============ 产品教程 (Product Tutor) ============
+
+class TutorRequest(BaseModel):
+    query: str = Field(..., min_length=1, max_length=500, description="用户问题")
+
+
+@router.post("/tutor")
+async def tutor_endpoint(request: TutorRequest):
+    """
+    产品教程接口
+    - 关键词命中产品知识库 → 直接返回 FAQ + 跳转动作
+    - 未命中且 LLM 可用 → 用 KB 做检索增强兜底
+    - 未命中且 LLM 不可用 → 返回引导话术
+    """
+    reply = await product_tutor_service.ask(request.query)
+    return {
+        "matched": reply.matched,
+        "source": reply.source,
+        "faq_id": reply.faq_id,
+        "answer": reply.answer,
+        "action_url": reply.action_url,
+        "action_text": reply.action_text,
+    }
+
+
+@router.get("/tutor/faqs")
+async def list_faqs():
+    """列出产品教程支持的所有 FAQ（前端可作为快速提问按钮）"""
+    return {
+        "total": len(product_tutor_service.faqs),
+        "faqs": [
+            {
+                "id": f.id,
+                "question": f.question,
+                "action_url": f.action_url,
+                "action_text": f.action_text,
+            }
+            for f in product_tutor_service.faqs
+        ],
+    }
