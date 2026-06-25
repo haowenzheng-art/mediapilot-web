@@ -1,117 +1,113 @@
 """
-MediaPilot API 速率限制中间
+MediaPilot API 速率限制中间件
+
+实现要点：
+- 滑动窗口 + 自动 GC 过期记录，避免内存无限增长
+- 限流键 = 端点 + IP（认证用户可叠加 user_id 维度）
+- 默认 60 次/分钟兜底
 """
-import sys
-import os
+import time
 import logging
+import threading
+from collections import defaultdict, deque
 from fastapi import Request
 from fastapi.responses import JSONResponse
-from typing import Optional, Callable
 
 logger = logging.getLogger(__name__)
 
-# 定义速率限制配置
+# 端点级速率限制配置
 RATE_LIMITS = {
-    "api_v1_trending_search": {"calls": 30, "period": 60},  # 30次/每分钟
-    "api_v1_trending_export": {"calls": 10, "period": 3600},  # 10次/每小时
+    "api_v1_trending_search": {"calls": 30, "period": 60},
+    "api_v1_trending_export": {"calls": 10, "period": 3600},
     "api_v1_competitors_search": {"calls": 20, "period": 3600},
     "api_v1_content_generate": {"calls": 5, "period": 60},
     "api_v1_video_transcribe": {"calls": 10, "period": 60},
+    "api_v1_agent_run": {"calls": 10, "period": 60},
 }
+
+DEFAULT_LIMIT = {"calls": 60, "period": 60}
+
+# 健康检查等路径跳过限流
+EXEMPT_PATHS = {"/", "/health", "/docs", "/openapi.json", "/redoc"}
 
 
 class RateLimiter:
-    """简单的内存速率限制器实现"""
+    """线程安全的滑动窗口速率限制器"""
 
     def __init__(self):
-        self._requests = {}  # {key: [(timestamp, count), ...]}
+        self._lock = threading.Lock()
+        self._requests: dict[str, deque] = defaultdict(deque)
+        self._last_gc = time.time()
 
     def is_allowed(self, key: str, limit_calls: int, period: int) -> bool:
-        """
-        检查是否允许请求
+        now = time.time()
+        with self._lock:
+            # 每 60s 触发一次全局 GC，回收空 deque
+            if now - self._last_gc > 60:
+                self._gc(now, period)
+                self._last_gc = now
 
-        Args:
-            key: 限制键
-            limit_calls: 允许的调用次数
-            period: 时间窗口（秒）
+            bucket = self._requests[key]
+            cutoff = now - period
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
 
-        Returns:
-            bool: 是否允许
-        """
-        import time
-        current_time = time.time()
+            if len(bucket) >= limit_calls:
+                return False
+            bucket.append(now)
+            return True
 
-        # 获取或创建该键的请求记录
-        if key not in self._requests:
-            self._requests[key] = []
-
-        # 清理过期记录
-        cutoff_time = current_time - period
-        self._requests[key] = [t for t in self._requests[key] if t > cutoff_time]
-
-        # 检查是否超过限制
-        if len(self._requests[key]) >= limit_calls:
-            return False
-
-        # 添加当前请求
-        self._requests[key].append(current_time)
-        return True
+    def _gc(self, now: float, max_period: int) -> None:
+        """清理所有过期桶，回收空 deque"""
+        cutoff = now - max_period
+        empty_keys = []
+        for k, bucket in self._requests.items():
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+            if not bucket:
+                empty_keys.append(k)
+        for k in empty_keys:
+            self._requests.pop(k, None)
 
 
-# 全局限流器
 _global_limiter = RateLimiter()
 
 
 def _get_rate_limit_for_endpoint(endpoint_name: str) -> dict:
-    """
-    获取端点的速率限制配置
+    return RATE_LIMITS.get(endpoint_name, DEFAULT_LIMIT)
 
-    Args:
-        endpoint_name: 端点名称
 
-    Returns:
-        dict: 速率限制配置
-    """
-    return RATE_LIMITS.get(endpoint_name, {"calls": 60, "period": 60})
+def _resolve_user_id(request: Request) -> str | None:
+    """尽量从已认证的 request.state 中提取 user_id"""
+    user = getattr(request.state, "user", None)
+    if user is not None:
+        uid = getattr(user, "id", None) or getattr(user, "sub", None)
+        if uid is not None:
+            return str(uid)
+    return None
 
 
 def create_rate_limiting_middleware():
-    """
-    创建速率限制中间件
-
-    Returns:
-        中间件函数
-    """
+    """创建速率限制中间件"""
     async def middleware(request: Request, call_next):
-        """
-        速率限制中间件
-
-        Args:
-            request: FastAPI 请求对象
-            call_next: 下一个中间件
-
-        Returns:
-            Response: 响应对象
-        """
-        # 获取端点名称
         path = request.url.path
-
-        # 检查是否跳过健康检查等特殊路由
-        if path in ["/", "/health", "/docs", "/openapi.json"]:
+        if path in EXEMPT_PATHS:
             return await call_next(request)
 
-        # 获取速率限制配置
         endpoint_name = f"api{path.replace('/', '_')}"
         limit_config = _get_rate_limit_for_endpoint(endpoint_name)
 
-        # 使用 IP 地址作为限流键
-        key = f"ip_{request.client.host}"
-        full_key = f"{endpoint_name}:{key}"
+        ip = request.client.host if request.client else "unknown"
+        user_id = _resolve_user_id(request)
+        identity = f"u{user_id}" if user_id else f"ip_{ip}"
+        full_key = f"{endpoint_name}:{identity}"
 
-        # 检查是否超过限制
-        if not _global_limiter.is_allowed(full_key, limit_config["calls"], limit_config["period"]):
-            logger.warning(f"Rate limit exceeded for {endpoint_name}: {request.method} {request.url}")
-
+        if not _global_limiter.is_allowed(
+            full_key, limit_config["calls"], limit_config["period"]
+        ):
+            logger.warning(
+                f"Rate limit exceeded: {request.method} {path} identity={identity}"
+            )
             return JSONResponse(
                 status_code=429,
                 content={
@@ -120,12 +116,12 @@ def create_rate_limiting_middleware():
                     "error": {
                         "code": "rate_limit_exceeded",
                         "message": "超过速率限制",
-                        "retry_after": limit_config["period"]
-                    }
-                }
+                        "retry_after": limit_config["period"],
+                    },
+                },
+                headers={"Retry-After": str(limit_config["period"])},
             )
 
-        # 继续处理请求
         return await call_next(request)
 
     return middleware

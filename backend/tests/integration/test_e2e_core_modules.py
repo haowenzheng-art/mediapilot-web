@@ -20,8 +20,10 @@ class TestTrendingModule:
         assert body["success"] is True
         assert "data" in body
 
-    def test_search_without_auth(self, client):
-        """未认证访问应 401"""
+    def test_search_without_auth(self, client, monkeypatch):
+        """未认证访问应 401（需临时关闭测试环境的 DEV_MODE）"""
+        from backend.config.settings import settings
+        monkeypatch.setattr(settings, "DEV_MODE", False)
         resp = client.post("/api/v1/trending/search", json={
             "keyword": "AI",
             "platforms": ["douyin"],

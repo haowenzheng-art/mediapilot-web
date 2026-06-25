@@ -73,27 +73,20 @@ class HotTopicAggregator:
         """
         去重逻辑：
         1. 同一平台内按热度去重（保留热度最高的）
-        2. 跨平台按标题相似度去重
+        2. 跨平台按标题相似度去重（按平台优先级顺序，未知源放最后）
         """
         # 步骤1：同一平台内去重
         for source, source_topics in grouped.items():
             grouped[source] = self._deduplicate_within_platform(source_topics)
 
-        # 步骤2：跨平台去重
+        # 步骤2：跨平台去重 — 按优先级排序，未在白名单中的源（如今日头条/未来新增源）追加在后
+        priority = ["百度新闻", "今日头条", "微博热搜", "知乎热榜", "抖音热榜", "小红书"]
+        ordered_sources = [s for s in priority if s in grouped] + \
+                          [s for s in grouped.keys() if s not in priority]
+
         all_topics = []
         used_titles = []
-
-        # 先添加百度新闻（优先）
-        if "百度新闻" in grouped:
-            for topic in grouped["百度新闻"]:
-                all_topics.append(topic)
-                used_titles.append(topic["title"])
-
-        # 添加其他平台的热点，检查与已添加的相似度
-        for source in ["微博热搜", "知乎热榜", "抖音热榜", "小红书"]:
-            if source not in grouped:
-                continue
-
+        for source in ordered_sources:
             for topic in grouped[source]:
                 title = topic["title"]
                 if self._is_duplicate(title, used_titles):
@@ -157,6 +150,7 @@ class HotTopicAggregator:
         if platform_weights is None:
             platform_weights = {
                 "百度新闻": 1.2,   # 权重较高，代表全网热度
+                "今日头条": 1.1,   # 真实关键词搜索，命中质量高
                 "微博热搜": 1.0,
                 "知乎热榜": 0.9,
                 "抖音热榜": 1.1,

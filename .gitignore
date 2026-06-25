@@ -1,9 +1,66 @@
-node_modules/
-dist/
-.env
-*.env.local
-*.log
+# ===== Python =====
 __pycache__/
 *.pyc
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+build/
+dist/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ===== Env / Secrets =====
+.env
+.env.local
+.env.*.local
+*.env.local
+tok.txt
+
+# ===== Database (dev) =====
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# ===== Node / Frontend =====
+node_modules/
+dist/
+dist-ssr/
+.vite/
+*.local
+
+# ===== Runtime artifacts =====
+logs/
+*.log
+uploads/
+!uploads/.gitkeep
+
+# ===== IDE / Editor =====
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# ===== OS =====
 .DS_Store
 Thumbs.db
+desktop.ini
+
+# ===== Stray dev files =====
+Users19802Desktopagent_resp.json
+
+# ===== Claude / agent working files =====
+.claude/settings.local.json
+
+# ===== Stray shell redirects =====
+/x
+web/x

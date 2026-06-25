@@ -5,6 +5,11 @@ Agent 执行器 — ReAct 循环
   Thought → Action(tool) → Observation → Thought → ... → Final Answer
 
 LLM 被注入工具描述后，自行决定何时调用工具、如何组合结果。
+
+安全保护：
+- max_iterations 上限 10，默认 5
+- 每步 LLM 调用有超时（依赖 ai_service 的 timeout）
+- 工具执行捕获所有异常，避免单工具失败拖垮整个循环
 """
 import json
 import logging
@@ -16,7 +21,8 @@ from backend.services.agent_service import tool_registry
 
 logger = logging.getLogger(__name__)
 
-MAX_ITERATIONS = 5
+DEFAULT_MAX_ITERATIONS = 5
+HARD_MAX_ITERATIONS = 10
 FINISH_PATTERN = re.compile(r"(?:final.?answer|最终答案)\s*:?\s*(.*)", re.IGNORECASE | re.DOTALL)
 
 
@@ -85,10 +91,15 @@ async def _parse_step(response: str) -> Optional[tuple[str, dict]]:
 class AgentExecutor:
     """ReAct Agent 执行器"""
 
-    def __init__(self, max_iterations: int = MAX_ITERATIONS):
+    def __init__(self, max_iterations: int = DEFAULT_MAX_ITERATIONS):
+        if max_iterations > HARD_MAX_ITERATIONS:
+            logger.warning(
+                f"max_iterations={max_iterations} 超过硬上限 {HARD_MAX_ITERATIONS}，已截断"
+            )
+            max_iterations = HARD_MAX_ITERATIONS
         self.max_iterations = max_iterations
 
-    async def run(self, user_message: str, db: Optional[Any] = None) -> dict:
+    async def run(self, user_message: str, db: Optional[Any] = None, user_id: Optional[int] = None) -> dict:
         """
         执行 ReAct 循环。
 
@@ -101,6 +112,7 @@ class AgentExecutor:
         """
         history: list[dict] = []
         trace: list[dict] = []
+        tool_failures: list[dict] = []
 
         for i in range(self.max_iterations):
             messages = _build_messages(user_message, history)
@@ -117,6 +129,7 @@ class AgentExecutor:
                     "answer": f"AI 服务调用失败: {e}",
                     "iterations": i,
                     "trace": trace,
+                    "tool_failures": tool_failures,
                 }
 
             trace.append({"step": i + 1, "llm_response": response})
@@ -124,44 +137,75 @@ class AgentExecutor:
 
             parsed = await _parse_step(response)
             if parsed is None:
-                # 无法解析，当作最终答案
                 return {
-                    "success": True,
+                    "success": not tool_failures,
                     "answer": response.strip(),
                     "iterations": i + 1,
                     "trace": trace,
+                    "tool_failures": tool_failures,
                 }
 
             action_type, payload = parsed
 
             if action_type == "answer":
                 return {
-                    "success": True,
+                    "success": not tool_failures,
                     "answer": payload,
                     "iterations": i + 1,
                     "trace": trace,
+                    "tool_failures": tool_failures,
                 }
 
             # action_type == "action"
             tool_name, args = payload
             tool = tool_registry.get(tool_name)
 
+            tool_failed = False
+            failure_reason = ""
             if tool is None:
                 observation = f"工具 '{tool_name}' 不存在。可用工具: {[t.name for t in tool_registry.list_tools()]}"
+                tool_failed = True
+                failure_reason = f"未知工具: {tool_name}"
             else:
                 try:
-                    result = await tool.execute(**args)
+                    tool_kwargs = {**args}
+                    if db is not None:
+                        tool_kwargs["db"] = db
+                    if user_id is not None:
+                        tool_kwargs["user_id"] = user_id
+                    result = await tool.execute(**tool_kwargs)
+                    if isinstance(result, dict) and result.get("success") is False:
+                        tool_failed = True
+                        failure_reason = str(result.get("error", "未提供原因"))
                     observation = json.dumps(result, ensure_ascii=False)
                 except Exception as e:
                     observation = f"工具执行出错: {e}"
+                    tool_failed = True
+                    failure_reason = str(e)
+
+            if tool_failed:
+                tool_failures.append({
+                    "step": i + 1,
+                    "tool": tool_name,
+                    "arguments": args,
+                    "error": failure_reason,
+                })
+                # 强提示，阻止 LLM 把失败包装成"成功"
+                observation = (
+                    f"[TOOL_FAILED] {observation}\n"
+                    f"严重提示：此工具调用失败，原因: {failure_reason}。"
+                    f"你必须在最终答案中如实告知用户该步骤失败的原因，"
+                    f"不要伪装成功，不要忽略此错误，不要编造工具未返回的数据。"
+                )
 
             trace.append({
                 "step": i + 1,
                 "action": tool_name,
                 "arguments": args,
                 "observation": observation,
+                "failed": tool_failed,
             })
-            logger.info(f"[Agent] Tool: {tool_name} → {observation[:200]}")
+            logger.info(f"[Agent] Tool: {tool_name} → failed={tool_failed} obs={observation[:200]}")
 
             history.append({
                 "role": "assistant",
@@ -177,6 +221,7 @@ class AgentExecutor:
             "role": "user",
             "content": (
                 "已达到最大步骤限制。请根据以上所有信息，给出最终答案。"
+                "如果中途有工具失败，必须在答案中说明失败原因，不得伪装成功。"
                 "使用 'Final Answer:' 格式输出。"
             ),
         })
@@ -193,8 +238,9 @@ class AgentExecutor:
         trace.append({"step": "max_iterations", "forced_final": True})
 
         return {
-            "success": True,
+            "success": not tool_failures,
             "answer": final_response.strip(),
             "iterations": self.max_iterations,
             "trace": trace,
+            "tool_failures": tool_failures,
         }

@@ -143,7 +143,7 @@ class SearchHotspotsTool(Tool):
             "required": ["keyword"]
         }
 
-    async def execute(self, keyword: str, platforms: Optional[list] = None, days: int = 7) -> dict:
+    async def execute(self, keyword: str, platforms: Optional[list] = None, days: int = 7, db: Optional[Any] = None) -> dict:
         try:
             service = TrendingService()
             result = await service.search(
@@ -226,7 +226,19 @@ class GenerateCopywritingTool(Tool):
         topic: Optional[str] = None,
         hotspot_content: Optional[str] = None,
         original_text: Optional[str] = None,
+        db: Optional[Any] = None,
+        user_id: Optional[int] = None,
     ) -> dict:
+        from backend.config.database import SessionLocal
+
+        if user_id is None:
+            return {"success": False, "error": "缺少 user_id 上下文"}
+
+        close_own_db = False
+        if db is None:
+            db = SessionLocal()
+            close_own_db = True
+
         try:
             req = CopywritingGenerateRequest(
                 mode=mode,
@@ -235,8 +247,15 @@ class GenerateCopywritingTool(Tool):
                 hotspot_content=hotspot_content,
                 original_text=original_text,
             )
-            # 使用 db_session 上下文（Agent 场景下无持久 DB，使用内存回退）
-            result = await copywriting_service.generate(req, db=None)
+            try:
+                result = await copywriting_service.generate(req, db, user_id=user_id)
+                if close_own_db:
+                    db.commit()
+            except Exception:
+                if close_own_db:
+                    db.rollback()
+                raise
+
             return {
                 "success": True,
                 "data": {
@@ -248,8 +267,14 @@ class GenerateCopywritingTool(Tool):
                 },
             }
         except Exception as e:
-            logger.error(f"GenerateCopywritingTool 执行失败: {e}")
+            logger.error(f"GenerateCopywritingTool 执行失败: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+        finally:
+            if close_own_db and db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
 
 class GetContentLibraryTool(Tool):
@@ -300,30 +325,34 @@ class GetContentLibraryTool(Tool):
         is_processed: Optional[bool] = None,
         limit: int = 20,
         offset: int = 0,
+        db: Optional[Any] = None,
+        user_id: Optional[int] = None,
     ) -> dict:
-        try:
-            from backend.models.domain.content_library import ContentType
-            ct = ContentType(content_type) if content_type else None
+        from backend.models.domain.content_library import ContentType
+        from backend.config.database import SessionLocal
 
-            # Agent 场景下可能没有 DB session，返回空列表
-            db = None
-            contents = []
+        if user_id is None:
+            return {"success": False, "error": "缺少 user_id 上下文"}
+
+        close_own_db = False
+        if db is None:
+            db = SessionLocal()
+            close_own_db = True
+
+        try:
+            ct = ContentType(content_type) if content_type else None
             try:
-                from backend.config.database import SessionLocal
-                db = SessionLocal()
                 contents = content_library_service.get_user_contents(
                     db=db,
-                    user_id=0,  # agent 场景
+                    user_id=user_id,
                     content_type=ct,
                     is_processed=is_processed,
                     limit=limit,
                     offset=offset,
                 )
-            except Exception:
-                pass
-            finally:
-                if db:
-                    db.close()
+            except Exception as e:
+                logger.warning(f"GetContentLibraryTool 查询失败: {e}", exc_info=True)
+                contents = []
 
             items = [
                 {
@@ -343,8 +372,14 @@ class GetContentLibraryTool(Tool):
                 "data": {"contents": items, "total": len(items)},
             }
         except Exception as e:
-            logger.error(f"GetContentLibraryTool 执行失败: {e}")
+            logger.error(f"GetContentLibraryTool 执行失败: {e}", exc_info=True)
             return {"success": False, "error": str(e)}
+        finally:
+            if close_own_db and db is not None:
+                try:
+                    db.close()
+                except Exception:
+                    pass
 
 
 # ==================== 注册所有工具 ====================

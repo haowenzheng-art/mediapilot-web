@@ -50,13 +50,14 @@ async def agent_run(
     executor = AgentExecutor(max_iterations=request.max_iterations)
 
     try:
-        result = await executor.run(user_message=request.message, db=db)
+        result = await executor.run(user_message=request.message, db=db, user_id=current_user.id)
         if result["success"]:
             return success_response(
                 data={
                     "answer": result["answer"],
                     "iterations": result["iterations"],
                     "trace": result.get("trace", []),
+                    "tool_failures": result.get("tool_failures", []),
                 },
                 message="Agent 执行完成",
             )
@@ -65,6 +66,7 @@ async def agent_run(
                 code=ErrorCode.INTERNAL_ERROR,
                 message=result.get("answer", "Agent 执行失败"),
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail={"tool_failures": result.get("tool_failures", [])},
             )
     except Exception as e:
         logger.error(f"Agent 执行失败: {e}", exc_info=True)
@@ -107,6 +109,7 @@ async def agent_stream(
 
             history = []
             trace = []
+            tool_failures = []
 
             for i in range(executor.max_iterations):
                 messages = _build_messages(request.message, history)
@@ -127,13 +130,13 @@ async def agent_stream(
                 parsed = await _parse_step(llm_response)
                 if parsed is None:
                     # 没有工具调用，直接结束
-                    yield f"data: {json.dumps({'type': 'answer', 'content': llm_response.strip()}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'answer', 'content': llm_response.strip(), 'tool_failures': tool_failures}, ensure_ascii=False)}\n\n"
                     break
 
                 action_type, payload = parsed
 
                 if action_type == "answer":
-                    yield f"data: {json.dumps({'type': 'answer', 'content': payload}, ensure_ascii=False)}\n\n"
+                    yield f"data: {json.dumps({'type': 'answer', 'content': payload, 'tool_failures': tool_failures}, ensure_ascii=False)}\n\n"
                     break
 
                 tool_name, args = payload
@@ -141,16 +144,43 @@ async def agent_stream(
 
                 yield f"data: {json.dumps({'type': 'action', 'tool': tool_name, 'arguments': args}, ensure_ascii=False)}\n\n"
 
+                tool_failed = False
+                failure_reason = ""
                 if tool is None:
                     observation = f"工具 '{tool_name}' 不存在。可用工具: {[t.name for t in tool_registry.list_tools()]}"
+                    tool_failed = True
+                    failure_reason = f"未知工具: {tool_name}"
                 else:
                     try:
-                        result = await tool.execute(**args)
+                        tool_kwargs = {**args}
+                        if db is not None:
+                            tool_kwargs["db"] = db
+                        tool_kwargs["user_id"] = current_user.id
+                        result = await tool.execute(**tool_kwargs)
+                        if isinstance(result, dict) and result.get("success") is False:
+                            tool_failed = True
+                            failure_reason = str(result.get("error", "未提供原因"))
                         observation = json.dumps(result, ensure_ascii=False)
                     except Exception as e:
                         observation = f"工具执行出错: {e}"
+                        tool_failed = True
+                        failure_reason = str(e)
 
-                yield f"data: {json.dumps({'type': 'observation', 'content': observation}, ensure_ascii=False)}\n\n"
+                if tool_failed:
+                    tool_failures.append({
+                        "step": i + 1,
+                        "tool": tool_name,
+                        "arguments": args,
+                        "error": failure_reason,
+                    })
+                    observation = (
+                        f"[TOOL_FAILED] {observation}\n"
+                        f"严重提示：此工具调用失败，原因: {failure_reason}。"
+                        f"你必须在最终答案中如实告知用户该步骤失败的原因，"
+                        f"不要伪装成功，不要忽略此错误，不要编造工具未返回的数据。"
+                    )
+
+                yield f"data: {json.dumps({'type': 'observation', 'content': observation, 'failed': tool_failed}, ensure_ascii=False)}\n\n"
 
                 history.append({"role": "assistant", "content": llm_response})
                 history.append({"role": "user", "content": f"Observation: {observation}"})

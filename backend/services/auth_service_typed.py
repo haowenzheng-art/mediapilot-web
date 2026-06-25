@@ -334,6 +334,22 @@ class AuthService:
         return True, user.quota_balance
 
     @staticmethod
+    def refund_quota(db: Session, user_id: int, feature: str) -> Tuple[bool, int]:
+        """
+        退还配额（按 feature cost）。失败的异步任务退款使用，不受 MAX_QUOTA 上限约束
+        因为只是把先前扣掉的还回去。
+        """
+        user = AuthService.get_user_by_id(db, user_id)
+        if not user:
+            return False, 0
+        cost = QUOTA_COSTS.get(feature, 1)
+        user.quota_balance += cost
+        db.commit()
+        db.refresh(user)
+        logger.info(f"退还配额: 用户ID:{user_id}, 操作:{feature}, +{cost}, 新余额:{user.quota_balance}")
+        return True, user.quota_balance
+
+    @staticmethod
     def recharge_quota(
         db: Session,
         user_id: int,

@@ -29,10 +29,19 @@ from backend.config.settings import settings, ensure_dev_user
 router = APIRouter(prefix="/shoot-script", tags=["拍摄脚本"])
 
 
+@router.get("/health")
+async def health_check():
+    """
+    健康检查端点
+    """
+    return success_response(data={"status": "ok"}, message="拍摄脚本服务正常")
+
+
 @router.post("/generate")
 async def generate_shoot_script(
     request: ShootScriptRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     生成拍摄脚本
@@ -47,7 +56,7 @@ async def generate_shoot_script(
     - relaxed: 轻松幽默
     - professional: 专业分析
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "generate_shoot_script"):
@@ -193,8 +202,8 @@ async def export_shoot_script(
 
 def _export_as_json(script: ShootScriptResponse) -> str:
     """导出为JSON格式"""
-    import json
-    return json.dumps(script.model_dump(), ensure_ascii=False, indent=2)
+    # 用 Pydantic 自带序列化，处理 datetime
+    return script.model_dump_json(indent=2)
 
 
 def _export_as_txt(script: ShootScriptResponse) -> str:
@@ -277,11 +286,3 @@ def _export_as_csv(script: ShootScriptResponse) -> str:
         ])
 
     return output.getvalue()
-
-
-@router.get("/health")
-async def health_check():
-    """
-    健康检查端点
-    """
-    return success_response(data={"status": "ok"}, message="拍摄脚本服务正常")

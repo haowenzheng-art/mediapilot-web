@@ -45,7 +45,7 @@ class SubscriptionResponse(BaseModel):
     last_pushed_at: Optional[datetime]
     next_push_at: Optional[datetime]
     created_at: datetime
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

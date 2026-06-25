@@ -3,7 +3,7 @@
 """
 import logging
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import Response
 from backend.models.schemas.request import VideoFetchRequest, VideoRewriteRequest, VideoTranscriptRequest
 from backend.models.schemas.response import APIResponse
@@ -20,11 +20,16 @@ video_service = VideoService()
 @router.post("/fetch", response_model=APIResponse)
 async def fetch_video(request: VideoFetchRequest):
     """获取视频信息"""
-    result = await video_service.fetch_video(
-        video_url=request.video_url,
-        platform=request.platform.value
-    )
-    return APIResponse(data=result)
+    if request.platform.value != "bilibili":
+        raise HTTPException(status_code=422, detail="目前暂时支持B站中文视频分析")
+    try:
+        result = await video_service.fetch_video(
+            video_url=request.video_url,
+            platform=request.platform.value
+        )
+        return APIResponse(data=result)
+    except RuntimeError as e:
+        raise HTTPException(status_code=422, detail=str(e))
 
 
 @router.post("/transcript", response_model=APIResponse)

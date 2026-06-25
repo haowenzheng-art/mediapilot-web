@@ -1,6 +1,7 @@
 """
 媒体处理业务逻辑
 """
+import asyncio
 import logging
 import uuid
 from typing import Dict, Any, Optional
@@ -11,10 +12,10 @@ from backend.models.schemas.response import (
     OutlineItem,
     MediaTranscribeResponse,
 )
-from backend.core.ai_service import ai_manager
 from backend.core.media_processor import MediaProcessor, MockMediaProcessor
 from backend.core.transcribe_engine import TranscribeEngineManager
 from backend.repository.task_repo import TaskRepository
+from backend.config.database import SessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -57,11 +58,46 @@ class MediaService:
         task_id = str(uuid.uuid4())
         self.task_repo.create_task(task_id, "pending", user_id=user_id)
 
-        # 保存文件并开始处理
+        # 保存文件
         file_path = self.media_processor.save_uploaded_file(file_content, filename)
-        await self._process_media_task(task_id, file_path)
+
+        # 异步处理，不阻塞 upload 响应。
+        # 注意：原 self.db 是 FastAPI 注入的 session，请求结束后会被关闭，
+        # 后台任务必须自己开新 session，不能复用 self.task_repo
+        asyncio.create_task(self._process_media_task_bg(task_id, file_path))
 
         return {"task_id": task_id, "status": "processing"}
+
+    async def _process_media_task_bg(self, task_id: str, file_path: str):
+        """后台任务包装器：独立 DB session，避免请求结束后 session 关闭"""
+        db = SessionLocal()
+        try:
+            task_repo = TaskRepository(db)
+            task_repo.update_status(task_id, "processing")
+            try:
+                result = await self.media_processor.transcribe_audio_async(file_path)
+
+                outline_dict = [
+                    {"section": "1", "title": "开场", "summary": "打招呼介绍主题"},
+                    {"section": "2", "title": "主题内容", "summary": "核心内容讲解"},
+                    {"section": "3", "title": "总结", "summary": "总结和引导关注"}
+                ]
+
+                timestamps_dict = result["timestamps"] if result.get("timestamps") else []
+
+                task_repo.update_status(
+                    task_id,
+                    "completed",
+                    transcript=result["transcript"],
+                    outline=outline_dict,
+                    timestamps=timestamps_dict
+                )
+                logger.info(f"媒体任务完成: {task_id}")
+            except Exception as e:
+                logger.error(f"媒体任务失败 {task_id}: {e}", exc_info=True)
+                task_repo.update_status(task_id, "failed", error=str(e))
+        finally:
+            db.close()
 
     async def get_status(self, task_id: str) -> Dict[str, Any]:
         """
@@ -108,45 +144,6 @@ class MediaService:
             timestamps=timestamps,
             error=task.error
         )
-
-    async def _process_media_task(self, task_id: str, file_path: str):
-        """
-        后台处理媒体文件
-
-        Args:
-            task_id: 任务 ID
-            file_path: 文件路径
-        """
-        self.task_repo.update_status(task_id, "processing")
-
-        try:
-            result = await self.media_processor.transcribe_audio_async(file_path)
-
-            outline_dict = []
-            try:
-                if ai_manager.get_current_service() and ai_manager.get_current_service().is_available():
-                    outline_dict = await ai_manager.generate_outline(result["transcript"])
-            except Exception as e:
-                logger.warning(f"AI outline generation failed, using default: {e}")
-
-            if not outline_dict:
-                outline_dict = [
-                    {"section": "1", "title": "开场", "summary": "打招呼介绍主题"},
-                    {"section": "2", "title": "主题内容", "summary": "核心内容讲解"},
-                    {"section": "3", "title": "总结", "summary": "总结和引导关注"}
-                ]
-
-            timestamps_dict = result["timestamps"] if result.get("timestamps") else []
-
-            self.task_repo.update_status(
-                task_id,
-                "completed",
-                transcript=result["transcript"],
-                outline=outline_dict,
-                timestamps=timestamps_dict
-            )
-        except Exception as e:
-            self.task_repo.update_status(task_id, "failed", error=str(e))
 
     def task_exists(self, task_id: str) -> bool:
         """

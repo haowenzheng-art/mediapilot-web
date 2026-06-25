@@ -2,11 +2,20 @@
 MediaPilot 集成测试 conftest
 使用内存 SQLite + StaticPool 确保同一连接共享
 """
+import os
+
+# 测试环境启用 DEV_MODE，让 ensure_dev_user 注入默认用户、绕过 JWT
+# 必须在 import settings 之前生效
+os.environ.setdefault("DEV_MODE", "true")
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool
+
+from backend.config.settings import settings
+settings.DEV_MODE = True  # 兜底：若 settings 已先加载，强制覆盖
 
 from backend.main import app
 from backend.config.database import get_db

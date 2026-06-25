@@ -56,6 +56,9 @@ class WhisperLocalEngine(TranscribeEngine):
     def _check_availability(self) -> bool:
         """检查 Whisper 是否可用"""
         try:
+            from backend.utils.whisper_compat import patch as _patch_whisper_compat
+            _patch_whisper_compat()
+
             import whisper
             subprocess.run(
                 ["ffmpeg", "-version"],
@@ -64,8 +67,8 @@ class WhisperLocalEngine(TranscribeEngine):
                 timeout=2
             )
             return True
-        except (ImportError, FileNotFoundError, subprocess.TimeoutExpired):
-            logger.warning("Whisper local engine not available")
+        except (ImportError, AttributeError, FileNotFoundError, subprocess.TimeoutExpired) as e:
+            logger.warning(f"Whisper local engine not available: {type(e).__name__}: {e}")
             return False
 
     def transcribe(self, audio_path: str, **kwargs) -> Dict[str, Any]:
@@ -86,17 +89,28 @@ class WhisperLocalEngine(TranscribeEngine):
         language = kwargs.get("language", self.language)
 
         try:
+            from backend.utils.whisper_compat import patch as _patch_whisper_compat
+            _patch_whisper_compat()
             import whisper
 
             # 加载模型
             whisper_model = whisper.load_model(model)
 
             # 执行转写
-            result = whisper_model.transcribe(
-                audio_path,
-                language=language,
-                verbose=False
-            )
+            # 关键：Whisper 中文转写默认不输出标点，通过 initial_prompt 引导模型
+            # 输出带标点的简体中文（这是社区公认的 hack，参考 openai/whisper#1390）
+            transcribe_kwargs = {
+                "language": language,
+                "verbose": False,
+            }
+            if language == "zh":
+                # Whisper 中文转写默认不输出标点：通过 initial_prompt 引导
+                # 关键 condition_on_previous_text=False：默认 True 会用上一段输出做 prompt，
+                # 一旦某段丢了标点，后续段会跟着无标点，initial_prompt 失效（openai/whisper#1390 #2026）
+                transcribe_kwargs["initial_prompt"] = "以下是普通话的句子，请输出带标点符号的简体中文。"
+                transcribe_kwargs["condition_on_previous_text"] = False
+
+            result = whisper_model.transcribe(audio_path, **transcribe_kwargs)
 
             # 解析结果
             transcript = result.get("text", "")

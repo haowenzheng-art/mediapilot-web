@@ -4,7 +4,7 @@
 """
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 from backend.config.database import get_db
 from backend.models.database.tables import UserTable
@@ -24,9 +24,9 @@ router = APIRouter(prefix="/auth", tags=["认证"])
 
 class RegisterRequest(BaseModel):
     """用户注册请求"""
-    username: str
-    password: str
-    email: str
+    username: str = Field(..., min_length=3, max_length=50, description="用户名")
+    password: str = Field(..., min_length=6, max_length=100, description="密码")
+    email: EmailStr = Field(..., description="邮箱")
 
 
 class LoginRequest(BaseModel):

@@ -215,7 +215,7 @@ class TestContentLibraryRepository:
         content = repo.create(
             user_id=test_user.id,
             content_type="copywriting",
-            content_id="copy-011",
+            content_uuid="copy-011",
             title="待处理内容"
         )
 
@@ -256,7 +256,7 @@ class TestContentLibraryRepository:
         content = repo.create(
             user_id=test_user.id,
             content_type="copywriting",
-            content_id="copy-013",
+            content_uuid="copy-013",
             title="待删除内容"
         )
 
@@ -334,7 +334,7 @@ class TestHotTopicTrendRepository:
         """创建趋势仓库"""
         from backend.tests.conftest import TestSessionLocal
         db = TestSessionLocal()
-        from backend.repository.content_repo import HotTopicTrendRepository
+        from backend.repository.content_library_repo import HotTopicTrendRepository
         return HotTopicTrendRepository(db)
 
     def test_create_trend_record(self, repo):
@@ -402,7 +402,7 @@ class TestHotTopicTrendRepository:
         )
 
         # 查询特定话题的趋势
-        trends = repo.get_by_topic_id("topic-004")
+        trends = repo.get_topic_trends("topic-004")
         assert len(trends) == 2
         assert all(t.hot_topic_id == "topic-004" for t in trends)
 

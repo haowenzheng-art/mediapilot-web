@@ -39,6 +39,10 @@ class ShootScriptRequest(BaseModel):
     platform: PlatformType = Field(..., description="目标平台")
     style: ScriptStyle = Field(default=ScriptStyle.ENERGETIC, description="脚本风格")
     persona: Optional[str] = Field(None, max_length=200, description="人设")
+    # 目标时长（秒）：60 / 120 / 180 / 300（B站长视频默认）。前端可选。
+    duration_seconds: Optional[int] = Field(
+        None, ge=15, le=900, description="目标时长（秒），未指定时按平台默认"
+    )
 
     # 热点关联（用于内容库追踪）
     hot_topic_id: Optional[str] = Field(None, description="关联的热点ID")

@@ -1,0 +1,400 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/**
+ * MediaPilot Notion Style Theme - 增强版
+ * 基于官方Notion设计系统优化
+ */
+
+/* ==================== Notion Design Tokens ==================== */
+:root {
+  /* 主背景色 - 纯黑 */
+  --notion-bg-primary: #000000;
+  --notion-bg-secondary: #111111;
+  --notion-bg-tertiary: #1a1a1a;
+  --notion-bg-hover: #1f1f1f;
+  --notion-bg-active: #2a2a2a;
+
+  /* 文字色 - 白色到浅灰 */
+  --notion-text-primary: rgba(255, 255, 255, 0.95);
+  --notion-text-secondary: #aaaaaa;
+  --notion-text-tertiary: #666666;
+  --notion-text-placeholder: #666666;
+
+  /* 品牌色 */
+  --notion-primary: #ffffff;
+  --notion-primary-hover: #e8e8e8;
+  --notion-primary-active: #cccccc;
+  --notion-primary-light: rgba(255, 255, 255, 0.1);
+  --notion-primary-text: #ffffff;
+  --notion-focus: #ffffff;
+
+  /* 语义色 */
+  --notion-success: #4ade80;
+  --notion-success-light: rgba(74, 222, 128, 0.1);
+  --notion-warning: #fbbf24;
+  --notion-warning-light: rgba(251, 191, 36, 0.1);
+  --notion-error: #f87171;
+  --notion-error-light: rgba(248, 113, 113, 0.1);
+  --notion-info: #67e8f9;
+
+  /* Whisper Border */
+  --notion-border: rgba(255, 255, 255, 0.1);
+  --notion-border-hover: rgba(255, 255, 255, 0.15);
+
+  /* 圆角系统 */
+  --notion-radius-xs: 4px;      /* 按钮、输入框 */
+  --notion-radius-sm: 5px;      /* 链接、列表 */
+  --notion-radius-md: 8px;      /* 小卡片 */
+  --notion-radius-lg: 12px;     /* 标准卡片 */
+  --notion-radius-xl: 16px;     /* 特色卡片 */
+  --notion-radius-pill: 9999px; /* 徽章 */
+  --notion-radius-circle: 50%;
+
+  /* 阴影系统 - 多层叠加 */
+  --notion-shadow-card:
+    rgba(255, 255, 255, 0.04) 0px 4px 18px,
+    rgba(255, 255, 255, 0.027) 0px 2.025px 7.84688px,
+    rgba(255, 255, 255, 0.02) 0px 0.8px 2.925px,
+    rgba(255, 255, 255, 0.01) 0px 0.175px 1.04062px;
+
+  --notion-shadow-deep:
+    rgba(255, 255, 255, 0.01) 0px 1px 3px,
+    rgba(255, 255, 255, 0.02) 0px 3px 7px,
+    rgba(255, 255, 255, 0.02) 0px 7px 15px,
+    rgba(255, 255, 255, 0.04) 0px 14px 28px,
+    rgba(255, 255, 255, 0.05) 0px 23px 52px;
+
+  --notion-shadow-hover:
+    rgba(255, 255, 255, 0.06) 0px 6px 20px,
+    rgba(255, 255, 255, 0.04) 0px 3px 10px;
+
+  /* 间距 - 8px基准 */
+  --notion-space-xs: 4px;
+  --notion-space-sm: 8px;
+  --notion-space-md: 12px;
+  --notion-space-lg: 16px;
+  --notion-space-xl: 24px;
+  --notion-space-2xl: 32px;
+  --notion-space-3xl: 48px;
+  --notion-space-4xl: 64px;
+  --notion-space-5xl: 80px;
+  --notion-space-6xl: 120px;
+
+  /* 过渡时间 */
+  --notion-transition-fast: 150ms ease-in-out;
+  --notion-transition-normal: 200ms ease-in-out;
+  --notion-transition-slow: 300ms ease-in-out;
+}
+
+/* ==================== 字体系统 - Inter ==================== */
+:root {
+  --font-primary: 'Inter', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+}
+
+/* 字重层级 */
+.font-weight-display { font-weight: 700; }   /* 标题/展示 */
+.font-weight-500 { font-weight: 500; }        /* UI元素 */
+.font-weight-600 { font-weight: 600; }        /* 强调标签 */
+.font-weight-body { font-weight: 400; }       /* 正文 */
+
+/* ==================== 交互状态 ==================== */
+/* Hover: 放大 */
+.hover-scale {
+  transition: transform var(--notion-transition-fast);
+}
+.hover-scale:hover {
+  transform: scale(1.05);
+}
+
+/* Active: 缩小 */
+.active-scale {
+  transition: transform var(--notion-transition-fast);
+}
+.active-scale:active {
+  transform: scale(0.95);
+}
+
+/* Focus: 蓝色outline圈 */
+.focus-ring {
+  outline: 2px solid var(--notion-focus);
+  outline-offset: 2px;
+}
+
+/* ==================== 按钮组件 ==================== */
+.btn-notion {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--notion-space-sm);
+  padding: 8px 16px;
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.33;
+  border: 1px solid transparent;
+  border-radius: var(--notion-radius-xs);
+  cursor: pointer;
+  transition: all var(--notion-transition-fast);
+  user-select: none;
+}
+
+.btn-notion:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Primary - 蓝色实心按钮 */
+.btn-notion-primary {
+  background-color: var(--notion-primary);
+  color: var(--bg-primary);
+}
+
+.btn-notion-primary:hover:not(:disabled) {
+  background-color: var(--notion-primary-hover);
+}
+
+.btn-notion-primary:active:not(:disabled) {
+  transform: scale(0.95);
+  background-color: var(--notion-primary-active);
+}
+
+.btn-notion-primary:focus-visible {
+  outline: 2px solid var(--notion-focus);
+  outline-offset: 2px;
+}
+
+/* Secondary - 灰色背景按钮 */
+.btn-notion-secondary {
+  background-color: rgba(255, 255, 255, 0.05);
+  color: var(--notion-text-primary);
+  border-color: transparent;
+}
+
+.btn-notion-secondary:hover:not(:disabled) {
+  background-color: rgba(255, 255, 255, 0.08);
+}
+
+.btn-notion-secondary:active:not(:disabled) {
+  transform: scale(0.95);
+}
+
+/* Ghost - 透明按钮 */
+.btn-notion-ghost {
+  background-color: transparent;
+  color: var(--notion-text-primary);
+}
+
+.btn-notion-ghost:hover:not(:disabled) {
+  color: var(--notion-primary);
+  text-decoration: underline;
+}
+
+/* Pill Badge 按钮 */
+.btn-notion-pill {
+  background-color: var(--notion-primary-light);
+  color: var(--notion-primary-text);
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--notion-radius-pill);
+  letter-spacing: 0.125px;
+}
+
+/* ==================== 输入框组件 ==================== */
+.input-notion,
+.textarea-notion {
+  width: 100%;
+  padding: 6px 12px;
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--notion-text-primary);
+  background-color: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--notion-radius-xs);
+  outline: none;
+  transition: border-color var(--notion-transition-fast);
+}
+
+.input-notion::placeholder,
+.textarea-notion::placeholder {
+  color: var(--notion-text-placeholder);
+}
+
+.input-notion:focus,
+.textarea-notion:focus {
+  border-color: var(--notion-primary);
+}
+
+.textarea-notion {
+  resize: vertical;
+  min-height: 120px;
+}
+
+/* ==================== 卡片组件 ==================== */
+.card-notion {
+  background-color: var(--notion-bg-primary);
+  border: 1px solid var(--notion-border);
+  border-radius: var(--notion-radius-lg);
+  padding: 24px;
+  box-shadow: var(--notion-shadow-card);
+  transition: box-shadow var(--notion-transition-normal);
+}
+
+.card-notion:hover {
+  box-shadow: var(--notion-shadow-hover);
+}
+
+.card-notion-xl {
+  border-radius: var(--notion-radius-xl);
+}
+
+/* ==================== 徽章组件 ==================== */
+.badge-notion {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  border-radius: var(--notion-radius-pill);
+  letter-spacing: 0.125px;
+  background-color: var(--notion-bg-secondary);
+  color: var(--notion-text-secondary);
+}
+
+.badge-notion-primary {
+  background-color: var(--notion-primary-light);
+  color: var(--notion-primary-text);
+}
+
+.badge-notion-success {
+  background-color: var(--notion-success-light);
+  color: var(--notion-success);
+}
+
+.badge-notion-warning {
+  background-color: var(--notion-warning-light);
+  color: var(--notion-warning);
+}
+
+.badge-notion-error {
+  background-color: var(--notion-error-light);
+  color: var(--notion-error);
+}
+
+/* ==================== 加载状态 ==================== */
+.loading-spinner {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--notion-bg-secondary);
+  border-top-color: var(--notion-primary);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--notion-bg-secondary) 0%,
+    var(--notion-bg-primary) 50%,
+    var(--notion-bg-secondary) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+@keyframes shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+/* ==================== 链接样式 ==================== */
+.link-notion {
+  color: var(--notion-primary);
+  text-decoration: none;
+  transition: color var(--notion-transition-fast);
+}
+
+.link-notion:hover {
+  color: var(--notion-primary-hover);
+  text-decoration: underline;
+}
+
+/* ==================== 表格样式 ==================== */
+.table-notion {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--notion-bg-primary);
+}
+
+.table-notion th,
+.table-notion td {
+  padding: 12px;
+  text-align: left;
+  border-bottom: 1px solid var(--notion-border);
+}
+
+.table-notion th {
+  font-weight: 600;
+  color: var(--notion-text-primary);
+  background-color: var(--notion-bg-secondary);
+}
+
+.table-notion tr:hover td {
+  background-color: var(--notion-bg-hover);
+}
+
+/* ==================== 分隔线 ==================== */
+.divider-notion {
+  height: 1px;
+  background-color: var(--notion-border);
+  border: none;
+  margin: 24px 0;
+}
+
+/* ==================== 工具类 ==================== */
+.bg-notion-alt {
+  background-color: var(--notion-bg-secondary);
+}
+
+.text-notion-primary {
+  color: var(--notion-text-primary);
+}
+
+.text-notion-secondary {
+  color: var(--notion-text-secondary);
+}
+
+.text-notion-muted {
+  color: var(--notion-text-tertiary);
+}
+
+/* ==================== 辅助动画 ==================== */
+.fade-in {
+  animation: fadeIn var(--notion-transition-normal);
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.slide-up {
+  animation: slideUp var(--notion-transition-normal);
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

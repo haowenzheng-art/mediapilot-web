@@ -82,24 +82,36 @@ async def submit_task(
     - generate_copywriting: params 需包含 mode, persona, 以及 topic/hotspot_content/original_text
     - search_trending: params 需包含 keyword, platforms, days
     """
-    # 配额检查
+    # 配额检查 + 预扣
     quota_ops = {
         "generate_copywriting": "generate_copywriting",
         "search_trending": "search_trending",
     }
     op = quota_ops.get(request.task_type)
-    if op and not auth_service.check_quota(db, current_user.id, op):
-        return error_response(
-            code=ErrorCode.RATE_LIMIT_EXCEEDED,
-            message=f"配额不足，当前余额: {current_user.quota_balance}",
-            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-        )
+    if op:
+        ok, balance = auth_service.check_quota(db, current_user.id, op)
+        if not ok:
+            return error_response(
+                code=ErrorCode.RATE_LIMIT_EXCEEDED,
+                message=f"配额不足，当前余额: {balance}",
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+        deducted, _ = auth_service.deduct_quota(db, current_user.id, op)
+        if not deducted:
+            return error_response(
+                code=ErrorCode.RATE_LIMIT_EXCEEDED,
+                message=f"配额不足，当前余额: {current_user.quota_balance}",
+                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
 
     task_id = str(uuid.uuid4())
 
     try:
-        from main import arq_pool
+        from backend.main import get_arq_pool
+        arq_pool = await get_arq_pool()
         if arq_pool is None:
+            if op:
+                auth_service.refund_quota(db, current_user.id, op)
             return error_response(
                 code=ErrorCode.VALIDATION_ERROR,
                 message="任务队列未就绪（Redis 未连接）",
@@ -118,7 +130,7 @@ async def submit_task(
                 user_id=current_user.id,
                 request_data=request.params,
                 task_id=task_id,
-                _job_timeout=300,
+                _job_id=task_id,
             )
         elif request.task_type == "search_trending":
             platforms = request.params.get("platforms", ["douyin", "weibo", "xiaohongshu"])
@@ -129,9 +141,11 @@ async def submit_task(
                 platforms=platforms,
                 days=request.params.get("days", 7),
                 task_id=task_id,
-                _job_timeout=300,
+                _job_id=task_id,
             )
         else:
+            if op:
+                auth_service.refund_quota(db, current_user.id, op)
             return error_response(
                 code=ErrorCode.INVALID_INPUT,
                 message=f"不支持的任务类型: {request.task_type}",
@@ -146,7 +160,30 @@ async def submit_task(
         )
 
     except Exception as e:
+        err_msg = str(e).lower()
+        # Redis 连接失效（startup 后 Redis 中途挂掉的场景）
+        # 触发重置 pool，下次请求会走 lazy 重连路径
+        is_redis_err = any(kw in err_msg for kw in ["timeout", "connection", "redis"])
+        if is_redis_err:
+            try:
+                import backend.main as main_mod
+                main_mod.arq_pool = None
+                logger.warning(f"检测到 Redis 连接失效，已重置 arq_pool 等待重连: {e}")
+            except Exception:
+                pass
+
         logger.error(f"提交任务失败: {e}")
+        if op:
+            try:
+                auth_service.refund_quota(db, current_user.id, op)
+            except Exception as refund_err:
+                logger.error(f"退还配额也失败了: {refund_err}")
+        if is_redis_err:
+            return error_response(
+                code=ErrorCode.VALIDATION_ERROR,
+                message="任务队列暂不可用，请稍后重试",
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            )
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
             message=f"提交任务失败: {str(e)}",
@@ -154,7 +191,7 @@ async def submit_task(
         )
 
 
-@router.get("/{task_id}", response_model=dict)
+@router.get("/{task_id}")
 async def get_task_status(
     task_id: str,
     db: Session = Depends(get_db),
@@ -169,7 +206,8 @@ async def get_task_status(
     - failed: 失败（error 包含原因）
     """
     try:
-        from main import arq_pool
+        from backend.main import get_arq_pool
+        arq_pool = await get_arq_pool()
         if arq_pool is None:
             return error_response(
                 code=ErrorCode.VALIDATION_ERROR,
@@ -177,46 +215,57 @@ async def get_task_status(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             )
 
-        job = await arq_pool.ainfo_job(task_id)
-        if not job:
+        from arq.jobs import Job, JobStatus
+
+        job = Job(task_id, redis=arq_pool)
+        js = await job.status()
+
+        # ARQ JobStatus → 对外状态
+        status_map = {
+            JobStatus.deferred: "pending",
+            JobStatus.queued: "pending",
+            JobStatus.in_progress: "processing",
+            JobStatus.complete: "completed",
+            JobStatus.not_found: None,  # 任务不存在
+        }
+        current_status = status_map.get(js)
+
+        if current_status is None:
             return error_response(
                 code=ErrorCode.NOT_FOUND,
                 message="任务不存在",
                 status_code=status.HTTP_404_NOT_FOUND,
             )
 
-        # arq Job 状态映射
-        status_map = {
-            "complete": "completed",
-            "crashed": "failed",
-            "deferred": "processing",
-            "pending": "pending",
-            "processing": "processing",
-        }
-        current_status = status_map.get(job.get("status"), "pending")
-
         response_data = {
             "task_id": task_id,
             "status": current_status,
         }
 
-        if job.get("result"):
-            result = job["result"]
-            if isinstance(result, str):
-                try:
-                    import json
-                    result = json.loads(result)
-                except Exception:
-                    pass
-            response_data.update(result)
-
-        if current_status == "failed" and job.get("fail traceback"):
-            response_data["error"] = job["fail traceback"]
+        # 仅在终态时取 result_info(成功/失败)
+        if current_status == "completed":
+            info = await job.result_info()
+            if info is not None:
+                if info.success:
+                    result = info.result
+                    if isinstance(result, dict):
+                        # worker 返回 {"status":..., "data":...} 或 {"status":"failed",...}
+                        if result.get("status") == "failed":
+                            response_data["status"] = "failed"
+                            response_data["error"] = result.get("error")
+                        else:
+                            response_data["data"] = result.get("data", result)
+                    else:
+                        response_data["data"] = result
+                else:
+                    # worker 抛了异常
+                    response_data["status"] = "failed"
+                    response_data["error"] = str(info.result) if info.result else "任务执行异常"
 
         return success_response(data=response_data, message="获取任务状态成功")
 
     except Exception as e:
-        logger.error(f"查询任务状态失败: {e}")
+        logger.error(f"查询任务状态失败: {e}", exc_info=True)
         return error_response(
             code=ErrorCode.INTERNAL_ERROR,
             message=f"查询任务状态失败: {str(e)}",

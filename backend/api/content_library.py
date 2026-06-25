@@ -22,6 +22,7 @@ from backend.utils.api_response import (
 )
 from backend.services.content_library_service import content_library_service
 from backend.models.database.tables import UserTable
+from backend.api.dependencies import get_current_user
 from backend.config.settings import settings, ensure_dev_user
 
 router = APIRouter(prefix="/content-library", tags=["内容库"])
@@ -34,7 +35,8 @@ async def get_contents(
     hot_topic_id: Optional[str] = Query(None, description="热点ID"),
     limit: int = Query(50, ge=1, le=100, description="返回数量限制"),
     offset: int = Query(0, ge=0, description="偏移量"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     获取用户的内容列表
@@ -44,7 +46,7 @@ async def get_contents(
     - is_processed: 是否已处理
     - hot_topic_id: 关联的热点ID
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         # 验证 content_type
@@ -85,14 +87,15 @@ async def get_contents(
 @router.post("/contents")
 async def create_content(
     content_in: ContentCreate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     创建内容记录
 
     用于在生成文案/脚本后自动保存到内容库
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         content = content_library_service.create_content(db, user.id, content_in)
@@ -112,12 +115,13 @@ async def create_content(
 @router.get("/contents/{content_id}")
 async def get_content(
     content_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     获取单条内容详情
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         content = content_library_service.get_content_by_id(db, content_id)
@@ -153,12 +157,13 @@ async def get_content(
 async def update_content(
     content_id: int,
     content_in: ContentUpdate,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     更新内容记录
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         content = content_library_service.update_content(db, content_id, user.id, content_in)
@@ -167,9 +172,22 @@ async def update_content(
             message="更新内容成功"
         )
     except ValueError as e:
+        msg = str(e)
+        if "不存在" in msg:
+            return error_response(
+                code=ErrorCode.NOT_FOUND,
+                message=msg,
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        if "无权" in msg:
+            return error_response(
+                code=ErrorCode.FORBIDDEN,
+                message=msg,
+                status_code=status.HTTP_403_FORBIDDEN
+            )
         return error_response(
             code=ErrorCode.INVALID_INPUT,
-            message=str(e),
+            message=msg,
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
@@ -184,12 +202,13 @@ async def update_content(
 @router.delete("/contents/{content_id}")
 async def delete_content(
     content_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     删除内容记录
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         success = content_library_service.delete_content(db, content_id, user.id)
@@ -205,9 +224,22 @@ async def delete_content(
                 status_code=status.HTTP_404_NOT_FOUND
             )
     except ValueError as e:
+        msg = str(e)
+        if "不存在" in msg:
+            return error_response(
+                code=ErrorCode.NOT_FOUND,
+                message=msg,
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        if "无权" in msg:
+            return error_response(
+                code=ErrorCode.FORBIDDEN,
+                message=msg,
+                status_code=status.HTTP_403_FORBIDDEN
+            )
         return error_response(
             code=ErrorCode.INVALID_INPUT,
-            message=str(e),
+            message=msg,
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
@@ -222,14 +254,15 @@ async def delete_content(
 @router.post("/contents/{content_id}/process")
 async def mark_as_processed(
     content_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     标记内容为已处理
 
     用户将内容用于创作后，标记为已处理
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         content = content_library_service.mark_as_processed(db, content_id, user.id)
@@ -238,9 +271,22 @@ async def mark_as_processed(
             message="标记已处理成功"
         )
     except ValueError as e:
+        msg = str(e)
+        if "不存在" in msg:
+            return error_response(
+                code=ErrorCode.NOT_FOUND,
+                message=msg,
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        if "无权" in msg:
+            return error_response(
+                code=ErrorCode.FORBIDDEN,
+                message=msg,
+                status_code=status.HTTP_403_FORBIDDEN
+            )
         return error_response(
             code=ErrorCode.INVALID_INPUT,
-            message=str(e),
+            message=msg,
             status_code=status.HTTP_400_BAD_REQUEST
         )
     except Exception as e:
@@ -256,14 +302,15 @@ async def mark_as_processed(
 async def get_hot_topic_contents(
     hot_topic_id: str,
     limit: int = Query(20, ge=1, le=100, description="返回数量限制"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     获取热点关联的内容
 
     查看基于该热点生成的所有文案和脚本
     """
-    user = ensure_dev_user(db)
+    user = current_user
 
     try:
         contents = content_library_service.get_hot_topic_contents(

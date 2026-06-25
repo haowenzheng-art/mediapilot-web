@@ -29,6 +29,7 @@ from backend.models.database.tables import UserTable
 from backend.config.settings import settings, ensure_dev_user
 from backend.services.auth_service import auth_service
 from backend.services.import_export_service import import_export_service
+from backend.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/trending", tags=["热点搜索"])
 
@@ -53,15 +54,15 @@ class SummaryRequest(BaseModel):
 @router.post("/search")
 async def search_trending(
     request: TrendingSearchRequest,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
 ):
     """
     搜索热点话题
 
     使用统一的响应模型和错误处理
     """
-    # 开发模式：直接返回默认用户
-    user = ensure_dev_user(db)
+    user = current_user
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "search_trending"):
@@ -129,14 +130,17 @@ async def search_trending(
 
 
 @router.post("/summary")
-async def get_topic_summary(request: SummaryRequest, db: Session = Depends(get_db)):
+async def get_topic_summary(
+    request: SummaryRequest,
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
+):
     """
     生成热点话题的AI总结
 
     返回热点事件的背景、关键事实、影响分析等内容
     """
-    # 开发模式：直接返回默认用户
-    user = ensure_dev_user(db)
+    user = current_user
 
     # 检查配额
     if not auth_service.check_quota(db, user.id, "ai_summary"):
@@ -240,30 +244,30 @@ async def get_article_content(request: ArticleContentRequest):
         content = ""
 
         if request.source == "百度新闻" or request.source == "百度热搜":
-            from scrapers.baidu_news import BaiduNewsScraper
+            from backend.scrapers.baidu_news import BaiduNewsScraper
             scraper = BaiduNewsScraper()
             content = await scraper.get_article_content(request.url)
             await scraper.close()
         elif request.source == "微博热搜":
-            from scrapers.weibo import WeiboScraper
+            from backend.scrapers.weibo import WeiboScraper
             scraper = WeiboScraper()
             # 微博内容获取需要登录，这里返回链接
             content = f"请前往原链接查看完整内容：{request.url}"
             await scraper.close()
         elif request.source == "知乎热榜":
-            from scrapers.zhihu import ZhihuScraper
+            from backend.scrapers.zhihu import ZhihuScraper
             scraper = ZhihuScraper()
             # 知乎内容获取需要登录，这里返回链接
             content = f"请前往原链接查看完整内容：{request.url}"
             await scraper.close()
         elif request.source == "抖音热榜":
-            from scrapers.douyin import DouyinScraper
+            from backend.scrapers.douyin import DouyinScraper
             scraper = DouyinScraper()
             # 抖音内容获取需要特殊处理，这里返回链接
             content = f"请前往原链接查看完整内容：{request.url}"
             await scraper.close()
         elif request.source == "小红书":
-            from scrapers.xiaohongshu import XiaohongshuScraper
+            from backend.scrapers.xiaohongshu import XiaohongshuScraper
             scraper = XiaohongshuScraper()
             # 小红书内容获取需要登录，这里返回链接
             content = f"请前往原链接查看完整内容：{request.url}"

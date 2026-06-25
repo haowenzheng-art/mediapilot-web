@@ -14,14 +14,22 @@ logger = logging.getLogger(__name__)
 
 # Redis 连接 URL
 def _parse_redis_url(url: str) -> dict:
-    m = re.match(r'redis://(?:::?)(?:(\w+):(\w+)@)?([^:]+)(?::(\d+))?(?:/(\d+))?', url)
+    """解析 redis://[user:pass@]host[:port][/db]，失败返回空字典使用默认值"""
+    m = re.match(
+        r'redis://(?:(?P<user>[^:@]+):(?P<password>[^@]*)@)?'
+        r'(?P<host>[^:/]+)(?::(?P<port>\d+))?(?:/(?P<db>\d+))?$',
+        url,
+    )
     if not m:
         return {}
-    return {
-        "host": m.group(3),
-        "port": int(m.group(4) or "6379"),
-        "database": int(m.group(5) or "0"),
+    out = {
+        "host": m.group("host"),
+        "port": int(m.group("port") or "6379"),
+        "database": int(m.group("db") or "0"),
     }
+    if m.group("password"):
+        out["password"] = m.group("password")
+    return out
 
 REDIS_URL = settings.model_dump().get("REDIS_URL") or "redis://localhost:6379/0"
 
@@ -46,16 +54,14 @@ async def shutdown(ctx: dict) -> None:
 class Worker:
     """ARQ Worker 配置"""
 
-    functions = [
-        "backend.worker.generate_copywriting_job",
-        "backend.worker.search_trending_job",
-    ]
+    functions: list = []  # populated at module bottom after function definitions
     startup = startup
     shutdown = shutdown
     max_jobs = 4
-    job_timeout = 300  # 5 分钟
+    job_timeout = 300
     retry_jobs = True
-    max_retry_count = 2
+    max_tries = 3
+    keep_result = 3600
 
 
 async def generate_copywriting_job(
@@ -101,12 +107,14 @@ async def generate_copywriting_job(
         # 反序列化请求
         req = CopywritingGenerateRequest(**request_data)
 
-        result = await copywriting_service.generate(req, db)
+        result = await copywriting_service.generate(req, db, user_id=user_id)
+
+        result_dict = result.model_dump(mode="json")
 
         task_repo.update(
             task_id=task_id,
             status="completed",
-            result=result.model_dump(),
+            result=result_dict,
         )
 
         db.close()
@@ -115,7 +123,7 @@ async def generate_copywriting_job(
         return {
             "status": "completed",
             "task_id": task_id,
-            "data": result.model_dump(),
+            "data": result_dict,
         }
 
     except Exception as e:
@@ -123,6 +131,7 @@ async def generate_copywriting_job(
         try:
             from backend.repository.task_repo import TaskRepository
             from backend.config.database import SessionLocal
+            from backend.services.auth_service_typed import auth_service
 
             db = SessionLocal()
             task_repo = TaskRepository(db)
@@ -131,6 +140,7 @@ async def generate_copywriting_job(
                 status="failed",
                 error=str(e),
             )
+            auth_service.refund_quota(db, user_id, "generate_copywriting")
             db.close()
         except Exception:
             pass
@@ -218,6 +228,7 @@ async def search_trending_job(
         try:
             from backend.repository.task_repo import TaskRepository
             from backend.config.database import SessionLocal
+            from backend.services.auth_service_typed import auth_service
 
             db = SessionLocal()
             task_repo = TaskRepository(db)
@@ -226,6 +237,7 @@ async def search_trending_job(
                 status="failed",
                 error=str(e),
             )
+            auth_service.refund_quota(db, user_id, "search_trending")
             db.close()
         except Exception:
             pass
@@ -235,3 +247,7 @@ async def search_trending_job(
             "task_id": task_id,
             "error": str(e),
         }
+
+
+# Register callables on Worker (must be after function defs)
+Worker.functions = [generate_copywriting_job, search_trending_job]

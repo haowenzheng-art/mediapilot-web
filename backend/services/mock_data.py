@@ -36,17 +36,30 @@ class MockDataService:
             f"2026最新{keyword}玩法"
         ]
 
+        # 平台搜索页 URL 模板：返回可访问的真实搜索链接，不再用 example.com 占位
+        from urllib.parse import quote
+        search_url_templates = {
+            "baidu": "https://www.baidu.com/s?wd={q}&tn=news",
+            "weibo": "https://s.weibo.com/weibo?q={q}",
+            "zhihu": "https://www.zhihu.com/search?type=content&q={q}",
+            "douyin": "https://www.douyin.com/search/{q}",
+            "xiaohongshu": "https://www.xiaohongshu.com/search_result?keyword={q}",
+            "bilibili": "https://search.bilibili.com/all?keyword={q}",
+        }
+
         hot_topics = []
         for i, title in enumerate(topics):
             platform_key = random.choice(platforms)
             source_name = self.platforms.get(platform_key, platform_key)
+            url_tpl = search_url_templates.get(platform_key, "https://www.google.com/search?q={q}")
+            real_url = url_tpl.format(q=quote(title))
             hot_topics.append({
                 "title": title,
                 "heat_value": float(random.randint(10000, 999999)),
                 "source": source_name,
                 "trend_direction": random.choice(["up", "down", "same"]),
                 "summary": f"这是关于{title}的热点摘要...",
-                "source_url": f"https://example.com/topic/{i}",
+                "source_url": real_url,
                 "published_at": datetime.now() - timedelta(days=random.randint(0, days)),
                 "crawled_at": datetime.now(),
                 "category": "综合",
