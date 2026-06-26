@@ -13,11 +13,12 @@ const inputStyle = {
   background: 'var(--bg-secondary)',
   color: 'var(--text-primary)',
   outline: 'none',
+  colorScheme: 'dark',
 }
 
 const btnPrimary = {
   padding: '10px 18px',
-  background: 'var(--accent-primary)',
+  background: 'var(--primary)',
   color: 'var(--bg-primary)',
   border: 'none',
   borderRadius: '8px',
@@ -38,7 +39,7 @@ const btnGhost = {
 
 const statCardStyle = {
   padding: '16px 20px',
-  background: 'var(--card-bg)',
+  background: 'var(--bg-secondary)',
   borderRadius: '10px',
   border: '1px solid var(--border-color)',
 }
@@ -159,7 +160,7 @@ function ContentLibraryPage() {
       {/* 筛选工具栏 */}
       <div style={{
         padding: '20px',
-        background: 'var(--card-bg)',
+        background: 'var(--bg-secondary)',
         borderRadius: '12px',
         border: '1px solid var(--border-color)',
         marginBottom: '20px',
@@ -243,7 +244,7 @@ function ContentLibraryPage() {
         <div style={{
           padding: '60px 24px',
           textAlign: 'center',
-          background: 'var(--card-bg)',
+          background: 'var(--bg-secondary)',
           borderRadius: '12px',
           border: '1px solid var(--border-color)',
           color: 'var(--text-tertiary)',
@@ -295,7 +296,7 @@ function ContentLibraryPage() {
                   onClick={() => handlePageChange(page)}
                   style={{
                     padding: '8px 14px',
-                    background: page === currentPage ? 'var(--accent-primary)' : 'var(--card-bg)',
+                    background: page === currentPage ? 'var(--primary)' : 'var(--bg-secondary)',
                     color: page === currentPage ? 'var(--bg-primary)' : 'var(--text-primary)',
                     border: '1px solid var(--border-color)',
                     borderRadius: '8px',
@@ -328,10 +329,10 @@ function ContentLibraryPage() {
         <div style={{
           marginTop: '16px',
           padding: '12px 16px',
-          background: 'rgba(220, 38, 38, 0.05)',
-          border: '1px solid rgba(220, 38, 38, 0.2)',
+          background: 'var(--error-light)',
+          border: '1px solid var(--border-color)',
           borderRadius: '8px',
-          color: '#dc2626',
+          color: 'var(--error)',
           fontSize: '13px',
         }}>
           {error}
@@ -345,7 +346,7 @@ function ContentLibraryPage() {
           bottom: '24px',
           right: '24px',
           padding: '12px 18px',
-          background: 'var(--accent-primary)',
+          background: 'var(--primary)',
           color: 'var(--bg-primary)',
           borderRadius: '8px',
           fontSize: '13px',

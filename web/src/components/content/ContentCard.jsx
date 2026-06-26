@@ -33,7 +33,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
       onClick={() => onViewDetail(content.id)}
       style={{
         padding: '20px',
-        background: 'var(--card-bg)',
+        background: 'var(--bg-secondary)',
         borderRadius: '12px',
         border: '1px solid var(--border-color)',
         cursor: 'pointer',
@@ -43,7 +43,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
         flexDirection: 'column',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.borderColor = 'var(--accent-primary)'
+        e.currentTarget.style.borderColor = 'var(--primary)'
         e.currentTarget.style.transform = 'translateY(-2px)'
       }}
       onMouseLeave={(e) => {
@@ -56,7 +56,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
           width: '36px',
           height: '36px',
           borderRadius: '50%',
-          background: 'var(--bg-accent)',
+          background: 'var(--bg-tertiary)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -66,7 +66,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
         </div>
         <span style={{
           padding: '3px 10px',
-          background: 'var(--bg-accent)',
+          background: 'var(--bg-tertiary)',
           color: 'var(--text-secondary)',
           borderRadius: '12px',
           fontSize: '11px',
@@ -111,7 +111,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
           {content.topics.slice(0, 3).map((topic, idx) => (
             <span key={idx} style={{
               padding: '2px 8px',
-              background: 'var(--bg-accent)',
+              background: 'var(--bg-tertiary)',
               color: 'var(--text-secondary)',
               borderRadius: '4px',
               fontSize: '11px',
@@ -151,7 +151,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
                 fontSize: '12px',
                 borderRadius: '4px',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-primary)' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary)' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
               title="编辑"
             >
@@ -170,7 +170,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
                 fontSize: '12px',
                 borderRadius: '4px',
               }}
-              onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626' }}
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--error)' }}
               onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
               title="删除"
             >

@@ -12,6 +12,7 @@ const inputStyle = {
   background: 'var(--bg-secondary)',
   color: 'var(--text-primary)',
   outline: 'none',
+  colorScheme: 'dark',
 }
 
 const labelStyle = {
@@ -23,7 +24,7 @@ const labelStyle = {
 
 const btnPrimary = {
   padding: '10px 18px',
-  background: 'var(--accent-primary)',
+  background: 'var(--primary)',
   color: 'var(--bg-primary)',
   border: 'none',
   borderRadius: '8px',
@@ -44,14 +45,14 @@ const btnGhost = {
 
 const cardStyle = {
   padding: '20px',
-  background: 'var(--card-bg)',
+  background: 'var(--bg-secondary)',
   borderRadius: '12px',
   border: '1px solid var(--border-color)',
 }
 
 const tabBtnStyle = (active) => ({
   padding: '10px 18px',
-  background: active ? 'var(--card-bg)' : 'transparent',
+  background: active ? 'var(--bg-secondary)' : 'transparent',
   color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
   border: active ? '1px solid var(--border-color)' : '1px solid transparent',
   borderRadius: '8px',
@@ -292,7 +293,7 @@ function SubscriptionPage() {
         gap: '6px',
         marginBottom: '20px',
         padding: '4px',
-        background: 'var(--bg-accent)',
+        background: 'var(--bg-tertiary)',
         borderRadius: '10px',
         width: 'fit-content',
       }}>
@@ -301,7 +302,7 @@ function SubscriptionPage() {
           style={tabBtnStyle(activeTab === 'subscriptions')}
         >
           我的订阅
-          <span style={badgeStyle(activeTab === 'subscriptions' ? 'var(--bg-accent)' : 'transparent', 'var(--text-secondary)')}>
+          <span style={badgeStyle(activeTab === 'subscriptions' ? 'var(--bg-tertiary)' : 'transparent', 'var(--text-secondary)')}>
             {subscriptions.length}
           </span>
         </button>
@@ -311,7 +312,7 @@ function SubscriptionPage() {
         >
           推送记录
           {unreadCount > 0 && (
-            <span style={badgeStyle('rgba(220, 38, 38, 0.1)', '#dc2626')}>
+            <span style={badgeStyle('var(--error-light)', 'var(--error)')}>
               {unreadCount} 未读
             </span>
           )}
@@ -336,7 +337,7 @@ function SubscriptionPage() {
                 alignItems: 'center',
                 gap: '14px',
                 padding: '16px 20px',
-                background: 'var(--card-bg)',
+                background: 'var(--bg-secondary)',
                 border: '1px dashed var(--border-color)',
                 borderRadius: '12px',
                 cursor: 'pointer',
@@ -345,8 +346,8 @@ function SubscriptionPage() {
                 fontSize: '14px',
               }}
               onMouseEnter={(e) => {
-                e.currentTarget.style.borderColor = 'var(--accent-primary)'
-                e.currentTarget.style.color = 'var(--accent-primary)'
+                e.currentTarget.style.borderColor = 'var(--primary)'
+                e.currentTarget.style.color = 'var(--primary)'
               }}
               onMouseLeave={(e) => {
                 e.currentTarget.style.borderColor = 'var(--border-color)'
@@ -357,7 +358,7 @@ function SubscriptionPage() {
                 width: '36px',
                 height: '36px',
                 borderRadius: '50%',
-                background: 'var(--bg-accent)',
+                background: 'var(--bg-tertiary)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
@@ -394,8 +395,8 @@ function SubscriptionPage() {
                             {sub.topic}
                           </h3>
                           <span style={badgeStyle(
-                            sub.status === 'active' ? 'rgba(34, 197, 94, 0.1)' : 'rgba(245, 158, 11, 0.1)',
-                            sub.status === 'active' ? '#16a34a' : '#d97706'
+                            sub.status === 'active' ? 'var(--success-light)' : 'var(--warning-light)',
+                            sub.status === 'active' ? 'var(--success)' : 'var(--warning)'
                           )}>
                             {getStatusText(sub.status)}
                           </span>
@@ -487,7 +488,7 @@ function SubscriptionPage() {
                     style={{
                       ...cardStyle,
                       borderLeft: record.status === 'unread'
-                        ? '3px solid var(--accent-primary)'
+                        ? '3px solid var(--primary)'
                         : '1px solid var(--border-color)',
                     }}
                   >
@@ -497,7 +498,7 @@ function SubscriptionPage() {
                           {record.topic}
                         </span>
                         <span style={badgeStyle(
-                          record.status === 'unread' ? 'var(--bg-accent)' : 'transparent',
+                          record.status === 'unread' ? 'var(--bg-tertiary)' : 'transparent',
                           record.status === 'unread' ? 'var(--text-primary)' : 'var(--text-tertiary)'
                         )}>
                           {getStatusText(record.status)}
@@ -548,10 +549,10 @@ function SubscriptionPage() {
         <div style={{
           marginTop: '16px',
           padding: '12px 16px',
-          background: 'rgba(220, 38, 38, 0.05)',
-          border: '1px solid rgba(220, 38, 38, 0.2)',
+          background: 'var(--error-light)',
+          border: '1px solid var(--border-color)',
           borderRadius: '8px',
-          color: '#dc2626',
+          color: 'var(--error)',
           fontSize: '13px',
         }}>
           {error}
