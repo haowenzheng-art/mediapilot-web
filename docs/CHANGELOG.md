@@ -8,6 +8,14 @@
 
 ### 新增
 - **产品故事 + Hero 截图**：README 与 PRD 顶部加入"AI 时代营销能力"叙事，引用 `docs/screenshots/home.png` Hero 首页截图
+
+### 变更
+- **内容库 / 话题订阅页对齐设计系统**：移除 Tailwind 渐变和双重 padding，改用 `PageContainer` + CSS vars（`--card-bg` / `--border-color` / `--text-primary`），与热点搜索 / 口播文案 / 拍摄脚本页视觉统一
+- **`ContentCard` 重写**：inline style + CSS vars，hover 用 `var(--accent-primary)` 边框，去掉 `bg-purple-100` / `text-purple-700` 等紫色硬编码
+- **订阅页弹窗**：改用与登录弹窗一致的 `Modal` 组件（`backdrop-filter: blur` + `var(--bg-primary)` 背景）
+
+### 移除
+- **AI 模板功能下线**：无后端 API、与口播文案功能重叠、不在 PRD 9 个需求内。删除 `TemplatesPage` / `use-templates` hook / `ROUTE_PATHS.TEMPLATES` / `HISTORY_TYPES.TEMPLATE` / Tabs 入口 / ContentPage 路由
 - **全网热点搜索**：百度/微博/知乎/抖音/小红书五端聚合，`is_today` 今日徽章，AI 总结，CSV 导出
 - **话题订阅与自动推送**：订阅话题，每日 08:00 APScheduler 自动扫描新热点推送，未读数 badge，用户隔离
 - **口播文案生成**：从0到1 / 热点框架 / 改写三模式，人设系统，"再改改"（更口语化/加情绪/加观点）

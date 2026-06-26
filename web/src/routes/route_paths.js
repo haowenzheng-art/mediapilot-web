@@ -10,7 +10,6 @@ export const ROUTE_PATHS = {
   TOPIC_HISTORY: 'topic-history',
   TRANSCRIPTION: 'transcription',
   VIDEO_ANALYSIS: 'video-analysis',
-  TEMPLATES: 'templates',
 }
 
 export default ROUTE_PATHS

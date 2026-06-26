@@ -14,8 +14,8 @@ from pathlib import Path
 import requests
 from playwright.sync_api import sync_playwright
 
-BASE = "http://127.0.0.1:5173"
-API = "http://127.0.0.1:8000"
+BASE = "http://localhost:5173"
+API = "http://localhost:8000"
 SAVE_DIR = Path(__file__).parent.parent / "docs" / "screenshots"
 SAVE_DIR.mkdir(parents=True, exist_ok=True)
 

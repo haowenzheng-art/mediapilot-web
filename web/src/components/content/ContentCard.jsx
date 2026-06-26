@@ -1,19 +1,11 @@
-/**
- * 内容卡片组件
- */
 function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
   const getTypeIcon = (type) => {
     switch (type) {
-      case 'script':
-        return '🎬'
-      case 'copywriting':
-        return '🎤'
-      case 'video':
-        return '📹'
-      case 'audio':
-        return '🎙️'
-      default:
-        return '📄'
+      case 'script': return '🎬'
+      case 'copywriting': return '🎤'
+      case 'video': return '📹'
+      case 'audio': return '🎙️'
+      default: return '📄'
     }
   }
 
@@ -28,6 +20,7 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
   }
 
   const formatDate = (dateString) => {
+    if (!dateString) return ''
     return new Date(dateString).toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
@@ -36,91 +29,130 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
   }
 
   return (
-    <div className="bg-white rounded-xl shadow hover:shadow-lg transition-all p-5 cursor-pointer group">
-      {/* 顶部图标和类型标签 */}
-      <div className="flex items-start justify-between mb-3">
-        <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center group-hover:bg-purple-100 transition-colors text-2xl">
+    <div
+      onClick={() => onViewDetail(content.id)}
+      style={{
+        padding: '20px',
+        background: 'var(--card-bg)',
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+        cursor: 'pointer',
+        transition: 'all 0.2s ease',
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+      }}
+      onMouseEnter={(e) => {
+        e.currentTarget.style.borderColor = 'var(--accent-primary)'
+        e.currentTarget.style.transform = 'translateY(-2px)'
+      }}
+      onMouseLeave={(e) => {
+        e.currentTarget.style.borderColor = 'var(--border-color)'
+        e.currentTarget.style.transform = 'translateY(0)'
+      }}
+    >
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '12px' }}>
+        <div style={{
+          width: '36px',
+          height: '36px',
+          borderRadius: '50%',
+          background: 'var(--bg-accent)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: '18px',
+        }}>
           {getTypeIcon(content.content_type)}
         </div>
-        <span className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs font-medium">
+        <span style={{
+          padding: '3px 10px',
+          background: 'var(--bg-accent)',
+          color: 'var(--text-secondary)',
+          borderRadius: '12px',
+          fontSize: '11px',
+          fontWeight: '500',
+        }}>
           {getTypeName(content.content_type)}
         </span>
       </div>
 
-      {/* 标题 */}
-      <h3 className="font-semibold text-gray-800 mb-2 line-clamp-2">
+      <h3 style={{
+        fontSize: '15px',
+        fontWeight: '600',
+        color: 'var(--text-primary)',
+        marginBottom: '8px',
+        lineHeight: '1.4',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        display: '-webkit-box',
+        WebkitLineClamp: 2,
+        WebkitBoxOrient: 'vertical',
+      }}>
         {content.title || '未命名内容'}
       </h3>
 
-      {/* 摘要 */}
-      <p className="text-sm text-gray-600 mb-3 line-clamp-3">
+      <p style={{
+        fontSize: '13px',
+        color: 'var(--text-secondary)',
+        marginBottom: '12px',
+        lineHeight: '1.5',
+        overflow: 'hidden',
+        textOverflow: 'ellipsis',
+        display: '-webkit-box',
+        WebkitLineClamp: 3,
+        WebkitBoxOrient: 'vertical',
+        flex: 1,
+      }}>
         {content.summary || content.content?.substring(0, 150) || '暂无摘要'}
       </p>
 
-      {/* 话题标签 */}
       {content.topics && content.topics.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginBottom: '8px' }}>
           {content.topics.slice(0, 3).map((topic, idx) => (
-            <span
-              key={idx}
-              className="px-2 py-0.5 bg-blue-50 text-blue-600 rounded text-xs"
-            >
+            <span key={idx} style={{
+              padding: '2px 8px',
+              background: 'var(--bg-accent)',
+              color: 'var(--text-secondary)',
+              borderRadius: '4px',
+              fontSize: '11px',
+            }}>
               {topic.name || topic.topic}
             </span>
           ))}
           {content.topics.length > 3 && (
-            <span className="px-2 py-0.5 text-gray-500 text-xs">
+            <span style={{ padding: '2px 6px', color: 'var(--text-tertiary)', fontSize: '11px' }}>
               +{content.topics.length - 3}
             </span>
           )}
         </div>
       )}
 
-      {/* 标签 */}
-      {content.tags && content.tags.length > 0 && (
-        <div className="flex flex-wrap gap-1 mb-3">
-          {content.tags.slice(0, 3).map((tag, idx) => (
-            <span
-              key={idx}
-              className="flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-600 rounded text-xs"
-            >
-              🏷️ {tag}
-            </span>
-          ))}
-          {content.tags.length > 3 && (
-            <span className="px-2 py-0.5 text-gray-500 text-xs">
-              +{content.tags.length - 3}
-            </span>
-          )}
-        </div>
-      )}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingTop: '10px',
+        borderTop: '1px solid var(--border-color)',
+      }}>
+        <span style={{ fontSize: '11px', color: 'var(--text-tertiary)' }}>
+          {formatDate(content.created_at)}
+        </span>
 
-      {/* 底部信息 */}
-      <div className="flex items-center justify-between pt-3 border-t border-gray-100">
-        <div className="flex items-center gap-2 text-xs text-gray-500">
-          <span>📅</span>
-          <span>{formatDate(content.created_at)}</span>
-        </div>
-
-        {/* 操作按钮 */}
-        <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <button
-            onClick={(e) => {
-              e.stopPropagation()
-              onViewDetail(content.id)
-            }}
-            className="p-1.5 hover:bg-gray-100 rounded text-gray-600 hover:text-purple-600 transition-colors"
-            title="查看详情"
-          >
-            👁️
-          </button>
+        <div style={{ display: 'flex', gap: '4px' }}>
           {onEdit && (
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onEdit(content)
+              onClick={(e) => { e.stopPropagation(); onEdit(content) }}
+              style={{
+                padding: '4px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                borderRadius: '4px',
               }}
-              className="p-1.5 hover:bg-gray-100 rounded text-gray-600 hover:text-blue-600 transition-colors"
+              onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--accent-primary)' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
               title="编辑"
             >
               ✏️
@@ -128,11 +160,18 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
           )}
           {onDelete && (
             <button
-              onClick={(e) => {
-                e.stopPropagation()
-                onDelete(content.id)
+              onClick={(e) => { e.stopPropagation(); onDelete(content.id) }}
+              style={{
+                padding: '4px 8px',
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--text-tertiary)',
+                cursor: 'pointer',
+                fontSize: '12px',
+                borderRadius: '4px',
               }}
-              className="p-1.5 hover:bg-red-50 rounded text-gray-600 hover:text-red-600 transition-colors"
+              onMouseEnter={(e) => { e.currentTarget.style.color = '#dc2626' }}
+              onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
               title="删除"
             >
               🗑️

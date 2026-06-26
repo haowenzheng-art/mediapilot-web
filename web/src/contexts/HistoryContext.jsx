@@ -4,7 +4,6 @@ const HISTORY_TYPES = {
   HOT_SEARCH: 'hot_search',
   COMPETITORS: 'competitors',
   SCRIPT: 'script',
-  TEMPLATE: 'template',
   PLATFORM_DATA: 'platform_data'
 }
 
