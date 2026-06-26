@@ -316,3 +316,37 @@ async def health_check():
     健康检查端点
     """
     return success_response(data={"status": "ok"}, message="话题订阅服务正常")
+
+
+@router.post("/push/trigger")
+async def trigger_push_now(
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
+):
+    """
+    手动触发订阅推送（仅 admin 可用）
+
+    开发/测试用：不等 08:00 定时任务，立即扫描到期订阅并推送。
+    生产环境通过 admin 权限隔离，普通用户无法触发。
+    """
+    if not current_user.is_admin:
+        return error_response(
+            code=ErrorCode.FORBIDDEN,
+            message="仅管理员可手动触发推送",
+            status_code=status.HTTP_403_FORBIDDEN
+        )
+
+    from backend.services.subscription_scheduler_service import run_push_cycle
+    try:
+        count = await run_push_cycle(db)
+        return success_response(
+            data={"triggered": True, "count": count},
+            message=f"推送任务已执行，处理 {count} 个订阅"
+        )
+    except Exception as e:
+        logger.error(f"手动触发推送失败: {e}", exc_info=True)
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR,
+            message=f"触发推送失败: {str(e)}",
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
