@@ -62,19 +62,15 @@ function ContentLibraryPage() {
     stats,
     loading,
     error,
-    setError,
     fetchContents,
     fetchContentDetail,
-    fetchRelatedContents,
     deleteContent,
-    fetchStats,
     contentTypes
   } = useContentLibrary()
 
   const [currentPage, setCurrentPage] = useState(1)
   const pageSize = 12
   const [selectedContent, setSelectedContent] = useState(null)
-  const [relatedContents, setRelatedContents] = useState([])
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [copySuccess, setCopySuccess] = useState(false)
 
@@ -88,7 +84,6 @@ function ContentLibraryPage() {
 
   useEffect(() => {
     fetchContents(filters, currentPage, pageSize)
-    fetchStats()
   }, [])
 
   const handleApplyFilters = () => {
@@ -113,8 +108,6 @@ function ContentLibraryPage() {
     if (detail) {
       setSelectedContent(detail)
       setShowDetailModal(true)
-      const related = await fetchRelatedContents(contentId)
-      setRelatedContents(related)
     }
   }
 
@@ -128,7 +121,6 @@ function ContentLibraryPage() {
     const success = await deleteContent(contentId)
     if (success) {
       fetchContents(filters, currentPage, pageSize)
-      fetchStats()
     }
   }
 
@@ -362,11 +354,9 @@ function ContentLibraryPage() {
       {showDetailModal && (
         <ContentDetailModal
           content={selectedContent}
-          relatedContents={relatedContents}
           onClose={() => {
             setShowDetailModal(false)
             setSelectedContent(null)
-            setRelatedContents([])
           }}
           onCopy={handleCopySuccess}
         />
