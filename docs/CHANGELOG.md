@@ -49,6 +49,10 @@
 - **Shot 缺 duration**：AI 输出未含时长时补默认值
 - **JSON 导出 datetime 序列化崩溃**：改用 `model_dump_json`
 - **`/generate` 误用 dev_user**：扣错配额，改用 JWT 用户
+- **内容库 / 话题订阅页颜色对比度**：日历图标、搜索按钮、订阅确认按钮字与背景几乎重合。改用 active `index.css` 的 CSS vars（`--primary` / `--bg-secondary` / `--text-primary`），input 加 `colorScheme: 'dark'` 让原生日期选择器图标在深色背景下可见
+- **内容库 / 订阅 401 缺少认证凭据**：service 用 bare fetch 没带 `Authorization` 头。改用 `services/api.js` 的 `request()` 统一注入 token + 401 自动刷新
+- **内容库 service 路径错**：调了 `/stats` `/related` `/tags` `/link-topic` 等不存在的端点。对齐 v3 实际路由 `/contents` 系列，删掉不存在的 method，stats 改前端本地聚合
+- **手动推送触发端点 event loop 冲突**：`POST /subscriptions/push/trigger` 调 `scheduled_subscription_push()`，后者用 `asyncio.run()` 在 FastAPI async 端点里触发 `RuntimeWarning: coroutine was never awaited`，端点返 200 但实际没创建推送记录。重构为 `async run_push_cycle(db)`，sync 入口（APScheduler）继续用 `asyncio.run`，async 端点直接 `await`
 
 ### 变更
 - 视频分析支持范围收敛为 **仅 B站中文视频**，其他平台入口下线
