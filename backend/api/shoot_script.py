@@ -2,11 +2,13 @@
 拍摄脚本生成路由
 使用统一的 API 响应模型
 """
+import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.config.database import get_db
@@ -110,6 +112,72 @@ async def generate_shoot_script(
             message=f"生成拍摄脚本失败: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@router.post("/generate/stream")
+async def generate_shoot_script_stream(
+    request: ShootScriptRequest,
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
+):
+    """
+    流式生成拍摄脚本（SSE）
+
+    复用 /generate 的配额检查逻辑（先 check 不扣，流式完成后再扣）。
+    异常时 refund_quota。
+    事件格式与 copywriting/stream 一致：OpenAI 兼容 + reasoning_content + meta.parsed。
+    """
+    # 配额检查（先 check，流式完成后再 deduct）
+    if not auth_service.check_quota(db, current_user.id, "generate_shoot_script"):
+        return error_response(
+            code=ErrorCode.RATE_LIMIT_EXCEEDED,
+            message=f"配额不足，当前余额: {current_user.quota_balance}",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+
+    quota_deducted = False
+
+    async def event_stream():
+        nonlocal quota_deducted
+        try:
+            async for event in shoot_script_service.generate_stream(request):
+                if event.get("type") == "content":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {"content": event["delta"]}}]
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "reasoning":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {"reasoning_content": event["delta"]}}]
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "meta":
+                    # 解析成功后扣配额
+                    if event.get("meta", {}).get("final") and not quota_deducted:
+                        try:
+                            auth_service.deduct_quota(db, current_user.id, "generate_shoot_script")
+                            quota_deducted = True
+                        except Exception as de:
+                            logger.error(f"扣配额失败: {de}")
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {}}],
+                        "meta": event.get("meta", {}),
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "error":
+                    yield "data: " + json.dumps({"error": event.get("delta", "")}, ensure_ascii=False) + "\n\n"
+
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"流式生成脚本失败: {e}")
+            yield "data: " + json.dumps({"error": f"流式生成失败: {str(e)}"}, ensure_ascii=False) + "\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/{script_id}")

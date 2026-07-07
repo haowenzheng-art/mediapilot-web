@@ -4,7 +4,7 @@
 import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional
+from typing import List, Optional, AsyncGenerator, Dict, Any
 
 from backend.core.ai_service import ai_manager
 from backend.models.domain.shoot_script import (
@@ -86,6 +86,93 @@ class ShootScriptService:
         self._scripts[script_id] = result
 
         return result
+
+    async def generate_stream(
+        self,
+        request: ShootScriptRequest,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式生成拍摄脚本（SSE 端点配套）。
+
+        yield 事件对象：
+          {"type": "content", "delta": "..."}    AI 输出片段（content）
+          {"type": "reasoning", "delta": "..."}  AI 输出片段（reasoning）
+          {"type": "meta", "meta": {"final": true, "parsed": {...}}}  结束事件，带解析结果
+          {"type": "error", "delta": "..."}      错误
+        """
+        script_id = str(uuid.uuid4())
+        platform_config = self._get_platform_config(request.platform, request.style, request.duration_seconds)
+        prompt = self._build_prompt(request, platform_config)
+
+        if not ai_manager.is_available():
+            yield {"type": "error", "delta": "AI 服务未配置或不可用，无法生成拍摄脚本"}
+            return
+
+        accumulated_content = ""
+        reasoning_seen = False
+        try:
+            async for event in ai_manager.generate_stream(
+                prompt,
+                max_tokens=3000,
+                enable_reasoning=request.enable_reasoning,
+            ):
+                if event.get("type") == "content" and event.get("delta"):
+                    accumulated_content += event["delta"]
+                    yield event
+                elif event.get("type") == "reasoning" and event.get("delta"):
+                    reasoning_seen = True
+                    yield event
+                elif event.get("type") == "error":
+                    yield event
+                    return
+        except Exception as e:
+            logger.error(f"AI 流式生成失败: {e}")
+            yield {"type": "error", "delta": f"AI 生成失败: {e}"}
+            return
+
+        # 解析累积内容（shots 整体性强，不流式拆开）
+        parsed = self._parse_ai_result(accumulated_content, request.platform)
+        shots_raw = parsed.get("shots", [])
+        if not shots_raw:
+            yield {"type": "error", "delta": "AI 返回的脚本为空，请稍后重试"}
+            return
+
+        # 转 Shot pydantic 模型
+        shots = [Shot(**s) for s in shots_raw]
+        title = parsed.get("title", "")
+        hooks = parsed.get("hooks", [])
+        call_to_action = parsed.get("call_to_action", "")
+        tags = parsed.get("tags", [])
+        estimated_duration = self._calculate_duration(shots)
+
+        result = ShootScriptResponse(
+            id=script_id,
+            topic=request.topic,
+            platform=request.platform,
+            style=request.style,
+            persona=request.persona,
+            shots=shots,
+            title=title,
+            hooks=hooks,
+            call_to_action=call_to_action,
+            tags=tags,
+            estimated_duration=estimated_duration,
+            created_at=datetime.utcnow()
+        )
+        self._scripts[script_id] = result
+
+        logger.info(
+            f"AI 流式脚本生成完成 platform={request.platform.value} "
+            f"shots={len(shots)} reasoning_seen={reasoning_seen}"
+        )
+
+        yield {
+            "type": "meta",
+            "meta": {
+                "final": True,
+                "reasoning_supported": reasoning_seen,
+                "parsed": result.model_dump(mode="json"),
+            },
+        }
 
     def get_script(self, script_id: str) -> Optional[ShootScriptResponse]:
         """获取脚本"""

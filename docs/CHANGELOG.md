@@ -11,6 +11,9 @@
 - **`useReasoningStreamRequest` Hook**（`web/src/hooks/use-reasoning-stream-request.js`）：双字段流式累积（reasoning + content），含 reasoningSupported 标志控制折叠区显隐、meta 事件透传、abort/reset
 - **热点搜索 TTLCache**（`backend/scrapers/cache.py`）：进程内内存缓存，默认 30 分钟（`settings.TRENDING_CACHE_TTL_SECONDS`），`TRENDING_CACHE_ENABLED=False` 可关闭；含 hits/misses 命中率统计
 - **SIxtys 接入缓存**（`backend/scrapers/sixtys.py:61-87`）：先查缓存再调 60s-api，0 命中也缓存（避免热门空词反复打 API）
+- **口播文案流式端点** `POST /api/v1/copywriting/generate/stream`：SSE 协议，复用 `/generate` 配额预扣/退款逻辑，事件 `{choices:[{delta:{content|reasoning_content}}]}` + meta.parsed 收尾事件
+- **拍摄脚本流式端点** `POST /api/v1/shoot-script/generate/stream`：与 copywriting/stream 同协议；shots 整体性强，仍按"完成再渲染"，但 content 流式填入 + reasoning 折叠区
+- **`enable_reasoning` 字段**：`CopywritingGenerateRequest` + `ShootScriptRequest` 都加 `enable_reasoning: bool = True`，前端 toggle 透传到后端
 
 ### 变更
 - **`ai_chat.py:89-94` + `agent.py:121` 流式调用方迁移**：适配新事件对象 yield（传 `enable_reasoning=False`，这两场景不需要深度思考）

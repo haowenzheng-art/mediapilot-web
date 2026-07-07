@@ -2,11 +2,13 @@
 口播文案生成路由
 使用统一的 API 响应模型
 """
+import json
 import logging
 
 logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from backend.config.database import get_db
@@ -197,6 +199,82 @@ async def generate_copywriting(
             message=f"生成文案失败: {str(e)}",
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
         )
+
+
+@router.post("/generate/stream")
+async def generate_copywriting_stream(
+    request: CopywritingGenerateRequest,
+    db: Session = Depends(get_db),
+    current_user: UserTable = Depends(get_current_user),
+):
+    """
+    流式生成口播文案（SSE）
+
+    复用 /generate 的配额预扣逻辑。流式过程异常/中断触发 refund_quota。
+    事件格式（OpenAI 兼容 + 扩展）：
+      data: {"choices":[{"delta":{"content":"...","reasoning_content":"..."}}]}\n\n
+      data: {"choices":[{"delta":{}}], "meta":{"final":true,"parsed":{...}}}\n\n
+      data: [DONE]\n\n
+    """
+    # 配额预扣（与 /generate 同款）
+    ok, balance = auth_service.check_quota(db, current_user.id, "generate_copywriting")
+    if not ok:
+        return error_response(
+            code=ErrorCode.RATE_LIMIT_EXCEEDED,
+            message=f"配额不足，当前余额: {balance}",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+
+    deducted, _ = auth_service.deduct_quota(db, current_user.id, "generate_copywriting")
+    if not deducted:
+        return error_response(
+            code=ErrorCode.RATE_LIMIT_EXCEEDED,
+            message=f"配额不足，当前余额: {current_user.quota_balance}",
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS
+        )
+
+    quota_refunded = False
+
+    async def event_stream():
+        nonlocal quota_refunded
+        try:
+            async for event in copywriting_service.generate_stream(request, db, user_id=current_user.id):
+                if event.get("type") == "content":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {"content": event["delta"]}}]
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "reasoning":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {"reasoning_content": event["delta"]}}]
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "meta":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {}}],
+                        "meta": event.get("meta", {})
+                    }, ensure_ascii=False) + "\n\n"
+                elif event.get("type") == "error":
+                    yield "data: " + json.dumps({"error": event.get("delta", "")}, ensure_ascii=False) + "\n\n"
+
+            yield "data: [DONE]\n\n"
+        except Exception as e:
+            logger.error(f"流式生成文案失败: {e}")
+            if not quota_refunded:
+                try:
+                    auth_service.refund_quota(db, current_user.id, "generate_copywriting")
+                    quota_refunded = True
+                except Exception as refund_err:
+                    logger.error(f"退还配额失败: {refund_err}")
+            yield "data: " + json.dumps({"error": f"流式生成失败: {str(e)}"}, ensure_ascii=False) + "\n\n"
+            yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",  # 禁用 nginx 缓冲
+        },
+    )
 
 
 @router.post("/rewrite")

@@ -49,6 +49,9 @@ class ShootScriptRequest(BaseModel):
     hot_topic_title: Optional[str] = Field(None, description="关联的热点标题")
     hot_topic_source: Optional[str] = Field(None, description="关联的热点来源")
 
+    # 流式生成选项
+    enable_reasoning: bool = Field(default=True, description="是否启用深度思考（reasoning_content）。仅当模型为推理模型且中转透传 reasoning_content 时有效。")
+
 
 class ShootScriptResponse(BaseModel):
     """拍摄脚本响应"""

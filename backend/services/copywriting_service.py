@@ -5,7 +5,7 @@ import logging
 import uuid
 import asyncio
 from datetime import datetime
-from typing import Optional
+from typing import Optional, AsyncGenerator, Dict, Any
 
 from sqlalchemy.orm import Session
 
@@ -77,6 +77,112 @@ class CopywritingService:
 
         return result
 
+    async def generate_stream(
+        self,
+        request: CopywritingGenerateRequest,
+        db: Session,
+        user_id: int,
+    ) -> AsyncGenerator[Dict[str, Any], None]:
+        """流式生成口播文案（SSE 端点配套）。
+
+        yield 事件对象：
+          {"type": "content", "delta": "..."}    AI 输出片段（content）
+          {"type": "reasoning", "delta": "..."}  AI 输出片段（reasoning）
+          {"type": "meta", "meta": {"final": true, "parsed": {...}}}  结束事件，带解析结果
+          {"type": "error", "delta": "..."}      错误
+        """
+        # 复用 reference_content 拉取逻辑（from_zero 模式）
+        reference_content = ""
+        if request.mode == "from_zero" and request.topic:
+            try:
+                from backend.scrapers.content_reference_scraper import ContentReferenceScraper
+                scraper = ContentReferenceScraper()
+                results = await scraper.get_reference_content(
+                    keyword=request.topic,
+                    platforms=["weibo", "baidu", "zhihu"],
+                    max_results=3
+                )
+                await scraper.close()
+
+                if results.get("summary"):
+                    reference_content = f"\n\n【参考内容】\n{results['summary']}"
+                    logger.info(f"已获取{request.topic}的参考内容")
+            except Exception as e:
+                logger.warning(f"获取参考内容失败: {e}")
+
+        prompt = self._build_prompt(request, reference_content)
+
+        if not ai_manager.is_available():
+            yield {"type": "error", "delta": "AI 服务未配置或不可用，无法生成文案"}
+            return
+
+        accumulated_content = ""
+        reasoning_seen = False
+        try:
+            async for event in ai_manager.generate_stream(
+                prompt,
+                max_tokens=2000,
+                enable_reasoning=request.enable_reasoning,
+            ):
+                if event.get("type") == "content" and event.get("delta"):
+                    accumulated_content += event["delta"]
+                    yield event
+                elif event.get("type") == "reasoning" and event.get("delta"):
+                    reasoning_seen = True
+                    yield event
+                elif event.get("type") == "error":
+                    yield event
+                    return
+        except Exception as e:
+            logger.error(f"AI 流式生成失败: {e}")
+            yield {"type": "error", "delta": f"AI 生成失败: {e}"}
+            return
+
+        # 解析累积内容
+        parsed = self._parse_ai_result(accumulated_content)
+        title = parsed.get("title", "")
+        hooks = parsed.get("hooks", [])
+        content = parsed.get("content", "")
+
+        if not title and not content:
+            yield {"type": "error", "delta": "AI 返回为空，请稍后重试"}
+            return
+
+        # 持久化
+        copywriting_id = str(uuid.uuid4())
+        repo = self._get_repo(db)
+        repo.create(
+            copywriting_id=copywriting_id,
+            title=title,
+            hooks=hooks,
+            content=content,
+            mode=request.mode,
+            persona=request.persona,
+            user_id=user_id
+        )
+
+        logger.info(
+            f"AI 流式生成完成 mode={request.mode} title_len={len(title)} "
+            f"content_len={len(content)} reasoning_seen={reasoning_seen}"
+        )
+
+        # 发送最终 meta 事件
+        yield {
+            "type": "meta",
+            "meta": {
+                "final": True,
+                "reasoning_supported": reasoning_seen,
+                "parsed": {
+                    "id": copywriting_id,
+                    "title": title,
+                    "hooks": hooks,
+                    "content": content,
+                    "mode": request.mode,
+                    "persona": request.persona,
+                },
+            },
+        }
+
     async def rewrite(self, copywriting_id: str, direction: str, persona: str, db: Session) -> CopywritingResponse:
         """改写文案（再改改功能，异步）"""
         repo = self._get_repo(db)
@@ -141,8 +247,6 @@ xxx
         )
 
         return result
-
-    async def get_copywriting(self, copywriting_id: str, db: Session) -> Optional[CopywritingResponse]:
         """从数据库获取文案（同步，不经过 AI）"""
         repo = self._get_repo(db)
         cw = repo.get_by_id(copywriting_id)
