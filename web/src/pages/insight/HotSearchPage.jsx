@@ -30,6 +30,75 @@ const formatTime = (dateStr) => {
   return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' })
 }
 
+/**
+ * 降级 / 缓存 提示条（v3 改造）
+ *
+ * - freshness='degraded'：有平台失败，黄条提示
+ * - used_cache=true：命中缓存，灰条提示"缓存于 X 秒前"
+ */
+function DegradedNotice({ result }) {
+  if (!result) return null
+  const { freshness, degraded_platforms, sixty_failed_platforms, used_cache, cached_at } = result
+
+  if (freshness === 'fresh' && !used_cache) return null
+
+  // 缓存命中
+  if (used_cache && cached_at) {
+    const cacheAgeSec = Math.floor((Date.now() - new Date(cached_at).getTime()) / 1000)
+    let ageLabel
+    if (cacheAgeSec < 60) ageLabel = `${cacheAgeSec} 秒前`
+    else if (cacheAgeSec < 3600) ageLabel = `${Math.floor(cacheAgeSec / 60)} 分钟前`
+    else ageLabel = `${Math.floor(cacheAgeSec / 3600)} 小时前`
+
+    return (
+      <div
+        style={{
+          padding: '12px 16px',
+          marginBottom: '12px',
+          background: 'rgba(59, 130, 246, 0.08)',
+          border: '1px solid rgba(59, 130, 246, 0.25)',
+          borderRadius: '8px',
+          fontSize: '13px',
+          color: 'var(--text-secondary)',
+        }}
+      >
+        📦 命中缓存（{ageLabel}），可点击"搜索"按钮强制刷新
+      </div>
+    )
+  }
+
+  // 降级
+  if (freshness === 'degraded') {
+    const failedPlatforms = sixty_failed_platforms && sixty_failed_platforms.length > 0
+      ? sixty_failed_platforms
+      : (degraded_platforms || [])
+    return (
+      <div
+        style={{
+          padding: '12px 16px',
+          marginBottom: '12px',
+          background: 'rgba(245, 158, 11, 0.08)',
+          border: '1px solid rgba(245, 158, 11, 0.3)',
+          borderRadius: '8px',
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+        }}
+      >
+        <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+          ⚠️ 部分平台数据获取失败
+        </div>
+        <div style={{ color: 'var(--text-secondary)', fontSize: '12px' }}>
+          {failedPlatforms.length > 0
+            ? `失败：${failedPlatforms.join('、')}。已自动用百度新闻补充结果。`
+            : '已自动降级到部分数据源。'}
+        </div>
+      </div>
+    )
+  }
+
+  return null
+}
+
 function HotSearchPage() {
   const [expandedTopics, setExpandedTopics] = useState(new Set())
   const [aiSummaries, setAiSummaries] = useState(new Map())
@@ -217,6 +286,9 @@ function HotSearchPage() {
           <div className="result-stats">
             找到 <strong>{result.total_count}</strong> 个相关热点
           </div>
+
+          {/* v3 改造：降级 / 缓存 提示 */}
+          <DegradedNotice result={result} />
 
           <div className="hot-topic-grid">
             {result.hot_topics.map((topic, index) => (

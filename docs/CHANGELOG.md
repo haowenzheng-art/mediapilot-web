@@ -19,6 +19,10 @@
 - **`ReasoningToggle` 通用组件**（`web/src/components/common/ReasoningToggle.jsx`）：开关式 toggle，CSS vars 主题适配，hint tooltip 解释作用
 - **CopywritingPage 流式渲染**：新增 `StreamingCopywritingView` + `ReasoningPanel` 组件，实时按行解析 title/hooks/content 三段，标题和钩子边收边渲染，"文案正文" 边填边显示"生成中"标记
 - **ShootScriptPage 流式渲染**：新增 `StreamingIndicator` 组件（shots 整体性强按完成再渲染），流式阶段只显示 thinking 折叠区 + 进度提示，完成后再渲染 ScriptInfo + ShotList
+- **视频 preview 播放器**（`web/src/components/video-edit/VideoPreviewPlayer.jsx`）：`<video controls preload="metadata" src="/preview">` + 错误兜底（"预览加载失败，请下载完整视频查看"）+ 提示"360p 预览（高压缩）。满意后点下载原画质"
+- **剪辑时间轴可视化**（`web/src/components/video-edit/TimelineBar.jsx`）：横向 bar（宽度=originalDuration），绿=保留段 / 红=删除段叠加，hover 显示删除原因（reason + text），10% 间隔刻度尺 + 图例
+- **VideoEditPage 改造**：hasResult 时右栏结构改为「播放器 → 统计 → 时间轴 → 删除列表 → 干净转写 → 任务 ID」，下载按钮保留
+- **热点搜索降级 / 缓存 提示条**（`HotSearchPage` + 新组件 `DegradedNotice`）：freshness=degraded 显示黄色提示"部分平台数据获取失败 + 已自动用百度新闻补充"；used_cache=true 显示蓝色提示"命中缓存（X 秒前）"
 - **视频剪辑 360p preview**（`backend/services/video_edit_service.py`）：`_ffmpeg_make_preview` 360p + crf 28 + b:v 600k + aac 64k + `+faststart`，10min ≈ 50MB。`_do_edit_pipeline` 末尾接入，失败兜底（preview_video_path=None，任务仍 completed）
 - **VideoEditTask 表加 preview 字段**（`backend/models/database/tables.py`）：`preview_video_path` + `preview_size_bytes`，nullable
 - **Preview 视频端点** `GET /api/v1/media/video-edit/{task_id}/preview`：FileResponse + `Accept-Ranges: bytes` + `Cache-Control: private, max-age=3600` + `Content-Disposition: inline`。用户先 preview 满意再下载原画质
