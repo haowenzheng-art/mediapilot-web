@@ -42,12 +42,29 @@ class TrendingService:
             TrendingSearchResponse: 热点搜索响应
         """
         try:
-            # 优先使用平台API
-            topics = await self.platform_api.search_hot_topics(
+            # 优先使用平台API（v3 改造：返回 HotTopicSearchResult）
+            from backend.core.platform_api import HotTopicSearchResult
+            search_result = await self.platform_api.search_hot_topics(
                 keyword=keyword,
                 platforms=platforms,
                 days=days
             )
+            # 兼容老签名（list 格式）和新签名（HotTopicSearchResult）
+            if isinstance(search_result, HotTopicSearchResult):
+                topics = search_result.topics
+                degraded_platforms = search_result.degraded_platforms
+                sixty_failed_platforms = search_result.sixty_failed_platforms
+                used_cache = search_result.used_cache
+                cached_at = search_result.cached_at
+                freshness = search_result.freshness
+            else:
+                # 兼容老调用
+                topics = search_result
+                degraded_platforms = []
+                sixty_failed_platforms = []
+                used_cache = False
+                cached_at = None
+                freshness = "fresh"
         except Exception as e:
             # API调用失败，降级到mock数据
             logger.warning(f"平台API调用失败，使用mock数据: {e}")
@@ -56,6 +73,11 @@ class TrendingService:
                 platforms=platforms,
                 days=days
             )
+            degraded_platforms = []
+            sixty_failed_platforms = []
+            used_cache = False
+            cached_at = None
+            freshness = "degraded"
 
         hot_topics: List[HotTopicResponse] = []
         if isinstance(topics, list):
@@ -74,10 +96,17 @@ class TrendingService:
             else:
                 hot_topics = []
 
+        from datetime import datetime
+        cached_at_dt = datetime.fromtimestamp(cached_at) if cached_at else None
         return TrendingSearchResponse(
             keyword=keyword,
             total_count=len(hot_topics),
-            hot_topics=hot_topics
+            hot_topics=hot_topics,
+            degraded_platforms=degraded_platforms,
+            sixty_failed_platforms=sixty_failed_platforms,
+            used_cache=used_cache,
+            cached_at=cached_at_dt,
+            freshness=freshness,
         )
 
 

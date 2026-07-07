@@ -14,6 +14,12 @@
 - **口播文案流式端点** `POST /api/v1/copywriting/generate/stream`：SSE 协议，复用 `/generate` 配额预扣/退款逻辑，事件 `{choices:[{delta:{content|reasoning_content}}]}` + meta.parsed 收尾事件
 - **拍摄脚本流式端点** `POST /api/v1/shoot-script/generate/stream`：与 copywriting/stream 同协议；shots 整体性强，仍按"完成再渲染"，但 content 流式填入 + reasoning 折叠区
 - **`enable_reasoning` 字段**：`CopywritingGenerateRequest` + `ShootScriptRequest` 都加 `enable_reasoning: bool = True`，前端 toggle 透传到后端
+- **视频剪辑 360p preview**（`backend/services/video_edit_service.py`）：`_ffmpeg_make_preview` 360p + crf 28 + b:v 600k + aac 64k + `+faststart`，10min ≈ 50MB。`_do_edit_pipeline` 末尾接入，失败兜底（preview_video_path=None，任务仍 completed）
+- **VideoEditTask 表加 preview 字段**（`backend/models/database/tables.py`）：`preview_video_path` + `preview_size_bytes`，nullable
+- **Preview 视频端点** `GET /api/v1/media/video-edit/{task_id}/preview`：FileResponse + `Accept-Ranges: bytes` + `Cache-Control: private, max-age=3600` + `Content-Disposition: inline`。用户先 preview 满意再下载原画质
+- **热点搜索失败检测 + baidu 加重**（`backend/core/platform_api.py`）：新增 `HotTopicSearchResult` dataclass（带 degraded_platforms / sixty_failed_platforms / freshness）。60s-api 失败 ≥2 平台时 baidu 多抓 20 条兜底；连续失败 ≥3 次触发 30s 快速失败窗口（跳过 60s-api 调用，省 60s×N 等待）
+- **TrendingSearchResponse UI 透明化字段**（`backend/models/schemas/response.py`）：`degraded_platforms` / `sixty_failed_platforms` / `used_cache` / `cached_at` / `freshness`（fresh/stale/degraded）
+- **8/2 配额**（`backend/services/trending_service.py`）：degraded 模式下 baidu 拿 80% 预算（8 条），其他源分享 20%（2 条），避免 60s 挂时内容空
 
 ### 变更
 - **`ai_chat.py:89-94` + `agent.py:121` 流式调用方迁移**：适配新事件对象 yield（传 `enable_reasoning=False`，这两场景不需要深度思考）

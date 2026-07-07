@@ -32,12 +32,13 @@ class TestHotTopicAPI:
             days=7
         )
 
-        assert isinstance(result, list)
-        assert len(result) > 0
-        assert result[0]["platform"] == "weibo"
-        assert "title" in result[0]
-        assert "heat_index" in result[0]
-        assert "trend" in result[0]
+        # v3 改造：search_hot_topics 返回 HotTopicSearchResult dataclass
+        topics = result.topics
+        assert len(topics) > 0
+        assert topics[0]["platform"] == "weibo"
+        assert "title" in topics[0]
+        assert "heat_index" in topics[0]
+        assert "trend" in topics[0]
 
     @pytest.mark.asyncio
     async def test_search_hot_topics_multiple_platforms(self, api):
@@ -48,9 +49,9 @@ class TestHotTopicAPI:
             days=3
         )
 
-        assert isinstance(result, list)
-        assert len(result) > 0
-        platforms = [r["platform"] for r in result]
+        topics = result.topics
+        assert len(topics) > 0
+        platforms = [r["platform"] for r in topics]
         assert "douyin" in platforms
         assert "xiaohongshu" in platforms
 
@@ -63,8 +64,9 @@ class TestHotTopicAPI:
             days=7
         )
 
-        # 即使关键词为空，也应该返回mock数据
-        assert isinstance(result, list)
+        # 即使关键词为空，也应该返回结果对象（topics 可能为空列表）
+        assert hasattr(result, "topics")
+        assert isinstance(result.topics, list)
 
     @pytest.mark.asyncio
     async def test_mock_hot_topics(self, api):
@@ -91,8 +93,9 @@ class TestHotTopicAPI:
             days=7
         )
 
-        for i in range(1, len(result)):
-            assert result[i-1]["heat_index"] >= result[i]["heat_index"]
+        topics = result.topics
+        for i in range(1, len(topics)):
+            assert topics[i-1]["heat_index"] >= topics[i]["heat_index"]
 
     @pytest.mark.asyncio
     async def test_search_hot_topics_with_api_key(self, api):
@@ -105,8 +108,8 @@ class TestHotTopicAPI:
             days=7
         )
 
-        assert isinstance(result, list)
-        assert len(result) > 0
+        assert hasattr(result, "topics")
+        assert len(result.topics) > 0
 
 
 class TestCompetitorAPI:
