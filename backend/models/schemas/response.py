@@ -134,3 +134,49 @@ class TrendingSearchResponse(BaseModel):
     keyword: str
     total_count: int
     hot_topics: List[HotTopicResponse]
+    # v3 改造：UI 透明化字段
+    degraded_platforms: List[str] = Field(
+        default_factory=list,
+        description="本次搜索降级的平台列表（前端用于黄条提示）"
+    )
+    sixty_failed_platforms: List[str] = Field(
+        default_factory=list,
+        description="60s-api 失败的具体平台（5 个 60s 端点）"
+    )
+    used_cache: bool = Field(default=False, description="是否全部命中缓存")
+    cached_at: Optional[datetime] = Field(default=None, description="缓存命中时的缓存时间")
+    freshness: str = Field(default="fresh", description="fresh | stale | degraded")
+
+
+class VideoEditSegment(BaseModel):
+    """视频剪辑片段（保留或删除）"""
+    start: float = Field(..., description="开始时间（秒）")
+    end: float = Field(..., description="结束时间（秒）")
+    text: Optional[str] = Field(default=None, description="对应文字（删除片段不填）")
+    reason: Optional[str] = Field(default=None, description="删除原因（仅删除片段填）")
+
+
+class VideoEditResponse(BaseModel):
+    """视频剪辑任务响应"""
+    task_id: str
+    status: str  # pending, processing, completed, failed
+    source_video_name: Optional[str] = None
+    transcript: Optional[str] = None
+    kept_segments: Optional[List[VideoEditSegment]] = None
+    removed_segments: Optional[List[VideoEditSegment]] = None
+    output_video_path: Optional[str] = None
+    preview_video_path: Optional[str] = None  # v3 新增：360p preview 路径
+    preview_size_bytes: Optional[int] = None   # v3 新增：preview 文件大小
+    subtitle_path: Optional[str] = None
+    subtitle_format: Optional[str] = "srt"
+    original_duration: Optional[float] = None
+    final_duration: Optional[float] = None
+    error: Optional[str] = None
+
+
+class VideoEditSegmentsResponse(BaseModel):
+    """视频剪辑片段响应"""
+    kept_segments: List[VideoEditSegment]
+    removed_segments: List[VideoEditSegment]
+    total_kept: int
+    total_removed: int

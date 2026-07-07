@@ -9,7 +9,7 @@
 """
 import logging
 import json
-from sqlalchemy import Column, String, Integer, Text, DateTime, TypeDecorator, Boolean, Index, ForeignKey, JSON
+from sqlalchemy import Column, String, Integer, Text, DateTime, TypeDecorator, Boolean, Index, ForeignKey, JSON, Float
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from typing import Optional
@@ -261,4 +261,62 @@ class CalendarEventTable(Base):
     __table_args__ = (
         Index('idx_calendar_user_date', 'user_id', 'scheduled_date'),
         Index('idx_calendar_user_status', 'user_id', 'status'),
+    )
+
+
+class VideoEditTaskTable(Base):
+    """视频剪辑任务表（AI 自动去除磕巴片段，生成干净视频+字幕）"""
+    __tablename__ = "video_edit_tasks"
+
+    # 主键
+    task_id = Column(String(36), primary_key=True, index=True)
+    status = Column(String(20), nullable=False, default="pending", index=True)
+    # pending / processing / completed / failed
+
+    # 关联用户
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+
+    # 源文件
+    source_video_path = Column(String(500), nullable=False)
+    source_video_name = Column(String(255), nullable=True)
+
+    # Whisper 转写结果
+    transcript = Column(Text, nullable=True)
+    word_timestamps = Column(JSONColumn, nullable=True)  # [[word, start, end], ...]
+
+    # LLM 识别结果
+    kept_segments = Column(JSONColumn, nullable=True)    # [[start, end], ...] 保留片段
+    removed_segments = Column(JSONColumn, nullable=True)  # [[start, end, reason], ...] 删除片段
+    llm_reasoning = Column(JSONColumn, nullable=True)    # LLM 原始判断结果，便于回溯
+
+    # 输出文件
+    output_video_path = Column(String(500), nullable=True)
+    subtitle_path = Column(String(500), nullable=True)
+    subtitle_format = Column(String(10), nullable=True, default="srt")
+    # 360p 预览文件路径（v3 改造：preview-only，满意再下载原画质）
+    preview_video_path = Column(String(500), nullable=True)
+    preview_size_bytes = Column(Integer, nullable=True)
+
+    # 剪辑配置
+    edit_config = Column(JSONColumn, nullable=True)   # VideoEditConfig 完整配置
+
+    # 统计信息
+    original_duration = Column(Float, nullable=True)
+    final_duration = Column(Float, nullable=True)
+
+    # 错误信息
+    error = Column(Text, nullable=True)
+
+    # 软删除
+    is_deleted = Column(Boolean, nullable=False, default=False, index=True)
+
+    # 时间戳
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, onupdate=func.now())
+
+    # 索引
+    __table_args__ = (
+        Index('idx_vedit_status', 'status'),
+        Index('idx_vedit_user_deleted', 'user_id', 'is_deleted'),
+        Index('idx_vedit_created_at', 'created_at'),
     )
