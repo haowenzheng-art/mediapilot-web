@@ -14,6 +14,15 @@ class TestContentService:
     def setup_method(self):
         """每个测试前初始化"""
         self.service = ContentService()
+        # 强制走 mock 路径，避免真实 AI 输出格式不稳定导致 flaky
+        from backend.core.ai_service import ai_manager
+        self._orig_get = ai_manager.get_current_service
+        ai_manager.get_current_service = lambda: None
+
+    def teardown_method(self):
+        """恢复 AI service"""
+        from backend.core.ai_service import ai_manager
+        ai_manager.get_current_service = self._orig_get
 
     async def test_generate_script_正常情况_返回脚本内容(self):
         """测试正常生成分镜头脚本"""
@@ -26,7 +35,7 @@ class TestContentService:
 
         assert result.topic == "AI工具"
         assert isinstance(result.script, list)
-        assert result.copywriting.title is not None
+        assert result.copywriting.topic is not None  # Copywriting schema: platform/topic/script/hooks/cta
 
     async def test_generate_script_空主题_返回默认脚本(self):
         """测试空主题返回默认脚本"""
@@ -67,10 +76,9 @@ class TestContentService:
         )
 
         copywriting = result.copywriting
-        assert hasattr(copywriting, 'title')
+        assert hasattr(copywriting, 'topic')
         assert hasattr(copywriting, 'hooks')
-        assert hasattr(copywriting, 'call_to_action')
-        assert hasattr(copywriting, 'tags')
+        assert hasattr(copywriting, 'cta')  # Copywriting schema: call_to_action → cta
 
     async def test_rewrite_transcript_正常情况_返回改写文本(self):
         """测试正常改写逐字稿"""

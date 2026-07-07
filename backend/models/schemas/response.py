@@ -115,10 +115,19 @@ class MediaTranscribeResponse(BaseModel):
     error: Optional[str] = None
 
 class ContentGenerateResponse(BaseModel):
-    """内容生成响应"""
-    title: str
-    content: str
+    """内容生成响应（v3：兼容 ContentService 实际返回）
+
+    历史 schema 期望 title/content/outline，但 ContentService 实际返回
+    topic/script/copywriting。保留旧字段作 Optional 兼容，加新字段满足 service。
+    """
+    # 旧字段（保留兼容）
+    title: Optional[str] = Field(default=None, description="旧字段：标题")
+    content: Optional[str] = Field(default=None, description="旧字段：内容")
     outline: Optional[List[OutlineItem]] = None
+    # 新字段（ContentService 实际返回）
+    topic: Optional[str] = Field(default=None, description="选题")
+    script: Optional[List[Shot]] = Field(default=None, description="分镜头脚本")
+    copywriting: Optional[Copywriting] = Field(default=None, description="文案内容")
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
 class CompetitorSearchResponse(BaseModel):

@@ -28,6 +28,15 @@
 - **TTLCache 单测**（`backend/tests/unit/test_cache.py`，14 cases）：覆盖 miss / 命中 / 过期 / 自定义 TTL / invalidate 单条/全清 / 命中率统计 / `make_cache_key` 边界
 - **Trending v3 字段 + 失败检测 e2e**（`test_trending_flow.py::TestTrendingV3Fields`，3 cases）：覆盖响应必含 v3 新字段、60s 失败时 freshness=degraded + sixty_failed_platforms 非空、缓存禁用时 used_cache=false
 - **bug 修复**：shoot_script `generate_stream` 漏 yield `meta` 事件，前端流式完成后 result 写入失败
+- **技术债清理**（A + C + D，23 → 0 fail）：
+  - **A 集成测试 JWT 缺失**：`tests/integration/test_trending_api.py` 32 个 test 缺 `auth_headers` fixture 和 `headers=auth_headers`，导致 17 个 401 fail。批量修复
+  - **C 字段名变更**：`tests/unit/test_import_export_service.py` 测试 mock 用旧字段 `username/niche`，但 service 列名是 `account_id/nickname/avg_likes`。对齐 service 列名
+  - **D AI 输出容错**：
+    - `backend/services/content_service.py` 加 `_normalize_shot()`：AI 输出 `scene=int`/`duration="MM:SS-MM:SS"` 时自动转 `str`/`float` 秒数（取 end 部分）
+    - `backend/services/content_service.py` 加 `_normalize_copywriting()`：AI 输出 `call_to_action`/`tags` 时补齐 schema 必填的 `platform/topic/script/cta`
+    - `models/schemas/response.py::ContentGenerateResponse` 加 Optional 兼容字段（保留 title/content/outline 旧字段，加 topic/script/copywriting 新字段）
+    - `tests/unit/test_content_service.py` 加 setup_method monkeypatch 强制走 mock 路径避免 flaky
+- **剩余 11 处 v3 老债**（schema 缺字段 + 真实 API 数据差异，不在本次范围）：platform_api 4 / trending_service 1 / calendar_service 1 / media integration 2 / copywriting rewrite 4（部分 flaky，依赖真实 AI 输出）
 - **视频剪辑 360p preview**（`backend/services/video_edit_service.py`）：`_ffmpeg_make_preview` 360p + crf 28 + b:v 600k + aac 64k + `+faststart`，10min ≈ 50MB。`_do_edit_pipeline` 末尾接入，失败兜底（preview_video_path=None，任务仍 completed）
 - **VideoEditTask 表加 preview 字段**（`backend/models/database/tables.py`）：`preview_video_path` + `preview_size_bytes`，nullable
 - **Preview 视频端点** `GET /api/v1/media/video-edit/{task_id}/preview`：FileResponse + `Accept-Ranges: bytes` + `Cache-Control: private, max-age=3600` + `Content-Disposition: inline`。用户先 preview 满意再下载原画质

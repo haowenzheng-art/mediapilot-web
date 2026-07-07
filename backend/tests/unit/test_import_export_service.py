@@ -146,37 +146,39 @@ def test_export_hot_topics_with_object(import_export_service):
 def test_export_competitors_with_dict(import_export_service):
     """测试导出对标账号（字典格式）"""
     accounts = [
-        {"username": "user1", "platform": "douyin", "niche": "科技", "followers": 10000},
-        {"username": "user2", "platform": "xiaohongshu", "niche": "美妆", "followers": 5000}
+        {"account_id": "user1", "nickname": "账号1", "platform": "douyin", "followers": 10000, "avg_likes": 500},
+        {"account_id": "user2", "nickname": "账号2", "platform": "xiaohongshu", "followers": 5000, "avg_likes": 200},
     ]
 
     result = import_export_service.export_competitors(accounts, "csv")
 
-    # 检查表头和数据行
-    assert "username" in result
+    # 检查表头和数据行（service 列名：account_id/nickname/platform/followers/avg_likes）
+    assert "account_id" in result
+    assert "nickname" in result
     assert "platform" in result
-    assert "niche" in result
     assert "followers" in result
     assert "user1" in result
     assert "douyin" in result
-    assert "科技" in result
     assert "10000" in result
 
 
 def test_export_competitors_with_object(import_export_service):
     """测试导出对标账号（对象格式）"""
     class MockAccount:
-        def __init__(self, username, platform, followers):
-            self.username = username
+        def __init__(self, account_id, nickname, platform, followers, avg_likes):
+            self.account_id = account_id
+            self.nickname = nickname
             self.platform = platform
             self.followers = followers
+            self.avg_likes = avg_likes
 
-    accounts = [MockAccount("user1", "douyin", 10000)]
+    accounts = [MockAccount("user1", "账号1", "douyin", 10000, 500)]
 
     result = import_export_service.export_competitors(accounts, "csv")
 
-    # 检查基本列名和数据
-    assert "username" in result
+    # 检查基本列名和数据（service 列名：account_id/nickname/platform/followers/avg_likes）
+    assert "account_id" in result
+    assert "user1" in result
     assert "platform" in result
     assert "followers" in result
     assert "user1" in result
