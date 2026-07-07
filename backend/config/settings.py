@@ -69,6 +69,11 @@ class Settings(BaseSettings):
     XINBANG_API_KEY: str = ""
     HUITUN_API_KEY: str = ""
 
+    # ==================== 热点搜索缓存 ====================
+    # 60s-api 数据本身更新慢，缓存命中能抗抖动 + 减少第三方 API 配额消耗
+    TRENDING_CACHE_TTL_SECONDS: int = 1800
+    TRENDING_CACHE_ENABLED: bool = True
+
     # ==================== 音视频转写 ====================
     TRANSCRIBE_ENGINE: str = "whisper_local"
     USE_MOCK_TRANSCRIBE: bool = False

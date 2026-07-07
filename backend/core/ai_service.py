@@ -21,8 +21,18 @@ class AIService(ABC):
         pass
 
     @abstractmethod
-    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
-        """流式生成文本"""
+    async def generate_stream(
+        self,
+        prompt: str,
+        enable_reasoning: bool = True,
+        **kwargs,
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        """流式生成文本
+
+        yield 事件对象：
+          {"type": "content", "delta": "..."}    最终答案片段
+          {"type": "reasoning", "delta": "..."}  深度思考片段（enable_reasoning=True 时才有）
+        """
         pass
 
     @abstractmethod
@@ -38,11 +48,13 @@ class AnthropicService(AIService):
         self,
         api_key: str,
         model: str = "agnes-2.0-flash",
+        base_url: Optional[str] = None,
         timeout: int = 60,
         max_retries: int = 3
     ):
         self.api_key = api_key
         self.model = model
+        self.base_url = base_url
         self.timeout = timeout
         self.max_retries = max_retries
         self.client = None
@@ -51,10 +63,10 @@ class AnthropicService(AIService):
     def _init_client(self):
         try:
             import anthropic
-            self.client = anthropic.Anthropic(
-                api_key=self.api_key,
-                timeout=self.timeout
-            )
+            client_kwargs = {"api_key": self.api_key, "timeout": self.timeout}
+            if self.base_url:
+                client_kwargs["base_url"] = self.base_url
+            self.client = anthropic.Anthropic(**client_kwargs)
         except ImportError:
             self.client = None
 
@@ -79,8 +91,18 @@ class AnthropicService(AIService):
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
 
-    async def generate_stream(self, prompt: str, max_tokens: int = 2000, **kwargs) -> AsyncGenerator[str, None]:
-        """流式生成文本"""
+    async def generate_stream(
+        self,
+        prompt: str,
+        max_tokens: int = 2000,
+        enable_reasoning: bool = True,
+        **kwargs,
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        """流式生成文本。yield 事件对象 {"type": "content"|"reasoning", "delta": "..."}。
+
+        Anthropic 不暴露 reasoning_content 字段，所以 reasoning 事件永远不 yield，
+        enable_reasoning 仅用于与其他 provider 保持签名一致。
+        """
         if not self.client:
             raise RuntimeError("Anthropic客户端未初始化，请检查 anthropic 包是否是否安装")
 
@@ -93,8 +115,9 @@ class AnthropicService(AIService):
                     messages=[{"role": "user", "content": prompt}]
                 ) as stream:
                     for text in stream.text_stream:
-                        yield text
-                        await asyncio.sleep(0)  # 让出控制权
+                        if text:
+                            yield {"type": "content", "delta": text}
+                            await asyncio.sleep(0)  # 让出控制权
                 return
             except Exception as e:
                 if attempt < self.max_retries - 1:
@@ -161,8 +184,17 @@ class OpenAIService(AIService):
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
 
-    async def generate_stream(self, prompt: str, max_tokens: int = 2000, **kwargs) -> AsyncGenerator[str, None]:
-        """流式生成文本"""
+    async def generate_stream(
+        self,
+        prompt: str,
+        max_tokens: int = 2000,
+        enable_reasoning: bool = True,
+        **kwargs,
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        """OpenAI 兼容流式生成。yield 事件对象 {"type": "content"|"reasoning", "delta": "..."}。
+
+        reasoning_content 来自 chunk.choices[0].delta.reasoning_content（如 DeepSeek-R1 等推理模型）。
+        """
         import asyncio
         for attempt in range(self.max_retries):
             try:
@@ -190,9 +222,17 @@ class OpenAIService(AIService):
                                     break
                                 try:
                                     chunk = json.loads(data)
-                                    content = chunk.get("choices", [{}])[0].get("delta", {}).get("content", "")
+                                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                                    # 解析 reasoning_content（深度思考片段）
+                                    if enable_reasoning:
+                                        reasoning = delta.get("reasoning_content") or ""
+                                        if reasoning:
+                                            yield {"type": "reasoning", "delta": reasoning}
+                                            await asyncio.sleep(0)
+                                    # 解析 content（最终答案片段）
+                                    content = delta.get("content") or ""
                                     if content:
-                                        yield content
+                                        yield {"type": "content", "delta": content}
                                         await asyncio.sleep(0)
                                 except json.JSONDecodeError:
                                     pass
@@ -279,11 +319,19 @@ class ArkService(AIService):
                     raise RuntimeError(f"AI生成失败: {str(e)}") from e
         return ""
 
-    async def generate_stream(self, prompt: str, max_tokens: int = 2000, **kwargs) -> AsyncGenerator[str, None]:
-        """流式生成文本 - 火山方舟支持流式输出"""
+    async def generate_stream(
+        self,
+        prompt: str,
+        max_tokens: int = 2000,
+        enable_reasoning: bool = True,
+        **kwargs,
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        """火山方舟流式生成。yield 事件对象 {"type": "content"|"reasoning", "delta": "..."}。
+
+        方舟响应格式：output[].content[].{type, text}；推理模型 type 为 "reasoning_text" 时映射到 reasoning 事件。
+        """
         import asyncio
 
-        # 如果base_url已经包含/responses，就不要重复添加
         if self.base_url.endswith("/responses"):
             url = self.base_url
         else:
@@ -326,14 +374,28 @@ class ArkService(AIService):
                                 try:
                                     chunk = json.loads(data_str)
                                     # 火山方舟流式响应格式
-                                    for content in chunk.get("output", []):
-                                        if content.get("type") == "message":
-                                            for msg_content in content.get("content", []):
-                                                if msg_content.get("type") == "output_text":
-                                                    text = msg_content.get("text", "")
-                                                    if text:
-                                                        yield text
-                                                        await asyncio.sleep(0)
+                                    for content_item in chunk.get("output", []):
+                                        if content_item.get("type") != "message":
+                                            continue
+                                        for msg_content in content_item.get("content", []):
+                                            content_type = msg_content.get("type")
+                                            text = msg_content.get("text", "")
+                                            if not text:
+                                                continue
+                                            # 解析 reasoning（方舟 type=reasoning_text 或 reasoning_content 字段）
+                                            if enable_reasoning and (
+                                                content_type == "reasoning_text"
+                                                or msg_content.get("reasoning_content")
+                                            ):
+                                                yield {"type": "reasoning", "delta": text}
+                                                await asyncio.sleep(0)
+                                            elif content_type == "output_text":
+                                                yield {"type": "content", "delta": text}
+                                                await asyncio.sleep(0)
+                                            # 兜底：未知 type 但有 text 字段时按 content 处理（保证向后兼容）
+                                            elif content_type not in ("output_text", "reasoning_text"):
+                                                yield {"type": "content", "delta": text}
+                                                await asyncio.sleep(0)
                                 except json.JSONDecodeError:
                                     pass
                         return
@@ -376,8 +438,9 @@ class AIServiceManager:
             service = AnthropicService(
                 api_key,
                 model or "ark-code-latest",
-                timeout,
-                max_retries
+                base_url=base_url,
+                timeout=timeout,
+                max_retries=max_retries
             )
         elif provider == "openai":
             resolved_url = base_url or "https://apihub.agnes-ai.com/v1"
@@ -429,8 +492,18 @@ class AIServiceManager:
             self._record_failure()
             raise
 
-    async def generate_stream(self, prompt: str, **kwargs) -> AsyncGenerator[str, None]:
-        """使用当前服务流式生成内容"""
+    async def generate_stream(
+        self,
+        prompt: str,
+        enable_reasoning: bool = True,
+        **kwargs,
+    ) -> AsyncGenerator[Dict[str, str], None]:
+        """使用当前服务流式生成内容
+
+        yield 事件对象：
+          {"type": "content", "delta": "..."}    最终答案片段
+          {"type": "reasoning", "delta": "..."}  深度思考片段（enable_reasoning=True 时才有）
+        """
         service = self.get_current_service()
         if not service:
             raise RuntimeError("AI服务未配置")
@@ -438,8 +511,10 @@ class AIServiceManager:
             raise RuntimeError("AI服务不可用，请检查API密钥配置")
         self._check_breaker()
         try:
-            async for chunk in service.generate_stream(prompt, **kwargs):
-                yield chunk
+            async for event in service.generate_stream(
+                prompt, enable_reasoning=enable_reasoning, **kwargs
+            ):
+                yield event
             self._record_success()
         except Exception:
             self._record_failure()

@@ -88,10 +88,16 @@ async def chat_stream_endpoint(request: ChatRequest):
 
     async def stream_generator():
         try:
-            async for chunk in ai_manager.generate_stream(prompt, max_tokens=request.max_tokens):
-                yield "data: " + json.dumps({
-                    "choices": [{"delta": {"content": chunk}}]
-                }) + "\n\n"
+            # AIChat 场景不需要深度思考，传 enable_reasoning=False
+            async for event in ai_manager.generate_stream(
+                prompt, max_tokens=request.max_tokens, enable_reasoning=False
+            ):
+                # ai_manager 现在 yield 事件对象 {"type": "content"|"reasoning", "delta": "..."}
+                # 透传给前端时仅取 content 字段，保持现有 OpenAI 兼容协议
+                if event.get("type") == "content":
+                    yield "data: " + json.dumps({
+                        "choices": [{"delta": {"content": event["delta"]}}]
+                    }) + "\n\n"
 
             # 发送完成标记
             yield "data: [DONE]\n\n"

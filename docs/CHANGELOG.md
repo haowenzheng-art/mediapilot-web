@@ -4,6 +4,24 @@
 
 ---
 
+## [v3.0.0] - 2026-07-07（开发中）
+
+### 新增
+- **AI 服务流式 reasoning_content 解析**：`OpenAIService` / `ArkService` / `AIServiceManager.generate_stream` 改为 yield 事件对象 `{type: "content"|"reasoning", delta: "..."}`，新增 `enable_reasoning` 参数。火山方舟/DeepSeek 类推理模型的 `reasoning_content` 透传；解析不到时折叠区自动隐藏，零回归
+- **`useReasoningStreamRequest` Hook**（`web/src/hooks/use-reasoning-stream-request.js`）：双字段流式累积（reasoning + content），含 reasoningSupported 标志控制折叠区显隐、meta 事件透传、abort/reset
+- **热点搜索 TTLCache**（`backend/scrapers/cache.py`）：进程内内存缓存，默认 30 分钟（`settings.TRENDING_CACHE_TTL_SECONDS`），`TRENDING_CACHE_ENABLED=False` 可关闭；含 hits/misses 命中率统计
+- **SIxtys 接入缓存**（`backend/scrapers/sixtys.py:61-87`）：先查缓存再调 60s-api，0 命中也缓存（避免热门空词反复打 API）
+
+### 变更
+- **`ai_chat.py:89-94` + `agent.py:121` 流式调用方迁移**：适配新事件对象 yield（传 `enable_reasoning=False`，这两场景不需要深度思考）
+- **4 个老爬虫 deprecation 标注**：`weibo.py` / `zhihu.py` / `douyin.py` / `xiaohongshu.py` 顶部加 DEPRECATED 注释（被 `sixtys.py` 的 SixtysXxxScraper 替代，不被 `platform_api.py` import）
+
+### 修复
+- **`test_ai_service.py` 9 个 v3 之前 sync→async 测试债**：`manager.generate()` 等早就改 async，但测试还在同步调用，统一用 `_run()` helper 包 `asyncio.run`
+- **`pyproject.toml` 缺失 `integration` marker 注册**：`@pytest.mark.integration` 标记因 `--strict-markers` 报 collection error，pyproject 加 `markers = ["integration: ..."]` 解决
+
+---
+
 ## [v3.0.0] - 2026-06-26（开发中）
 
 ### 新增

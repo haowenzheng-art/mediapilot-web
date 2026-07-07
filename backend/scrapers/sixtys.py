@@ -4,6 +4,8 @@
 数据源: https://60s-api.viki.moe (vikiboss/60s, Cloudflare Workers)
 覆盖平台: 微博 / 知乎 / 抖音 / 今日头条
 关键词搜索: API 不支持 keyword 参数，全量拉取后客户端过滤
+
+v3 改造：接入 TTLCache 抗 60s-api 抖动，缓存 30 分钟（settings.TRENDING_CACHE_TTL_SECONDS）
 """
 from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
@@ -12,6 +14,8 @@ import logging
 import httpx
 
 from backend.scrapers.base import BaseScraper
+from backend.scrapers.cache import trending_cache, make_cache_key
+from backend.config.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -63,8 +67,18 @@ class _SixtysBaseScraper(BaseScraper):
         keyword: str,
         days: int = 7,
     ) -> List[Dict[str, Any]]:
+        # 1. 查缓存：命中直接返回，跳过 60s-api 调用
+        if settings.TRENDING_CACHE_ENABLED:
+            cache_key = make_cache_key(self.endpoint, keyword, days)
+            cached = await trending_cache.get(cache_key)
+            if cached is not None:
+                logger.debug(f"60s {self.endpoint} cache hit [{keyword}@{days}]")
+                return cached
+
         items = await self._fetch_list()
         matched = self._filter_by_keyword(items, keyword)
+
+        result: List[Dict[str, Any]]
         if not matched:
             # 抖音/小红书没有真实关键词搜索源，0 命中时退回 TOP 榜
             # 加 "今日热点" 标签让前端知道这不是关键词命中
@@ -74,16 +88,24 @@ class _SixtysBaseScraper(BaseScraper):
                     f"fallback 到 TOP {min(len(items), 15)} 热榜"
                 )
                 fallback = items[:15]
-                return [
+                result = [
                     self._normalize_topic({**self._to_topic(it), "category": "今日热点"})
                     for it in fallback
                 ]
-            logger.info(
-                f"60s {self.endpoint} 关键词 [{keyword}] 未命中，返回空（共扫描 {len(items)} 条）"
-            )
-            return []
-        normalized = [self._normalize_topic(self._to_topic(it)) for it in matched]
-        return normalized
+            else:
+                logger.info(
+                    f"60s {self.endpoint} 关键词 [{keyword}] 未命中，返回空（共扫描 {len(items)} 条）"
+                )
+                result = []
+        else:
+            result = [self._normalize_topic(self._to_topic(it)) for it in matched]
+
+        # 2. 写缓存：成功结果缓存，0 命中也缓存（避免热门空词反复打 API）
+        if settings.TRENDING_CACHE_ENABLED:
+            await trending_cache.set(cache_key, result)
+            logger.debug(f"60s {self.endpoint} cached [{keyword}@{days}] size={len(result)}")
+
+        return result
 
     def _to_topic(self, item: Dict[str, Any]) -> Dict[str, Any]:
         """子类重写：把 60s 原始字段映射到统一字段"""

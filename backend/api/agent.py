@@ -118,9 +118,14 @@ async def agent_stream(
                 # 流式调用 LLM
                 llm_response = ""
                 try:
-                    async for chunk in ai_manager.generate_stream(full_prompt, max_tokens=2000):
-                        llm_response += chunk
-                        yield f"data: {json.dumps({'type': 'thought', 'content': chunk}, ensure_ascii=False)}\n\n"
+                    # agent 流程不需要深度思考（thought 事件由本函数自己管理），传 enable_reasoning=False
+                    async for event in ai_manager.generate_stream(
+                        full_prompt, max_tokens=2000, enable_reasoning=False
+                    ):
+                        if event.get("type") == "content":
+                            chunk = event["delta"]
+                            llm_response += chunk
+                            yield f"data: {json.dumps({'type': 'thought', 'content': chunk}, ensure_ascii=False)}\n\n"
                 except Exception as e:
                     yield f"data: {json.dumps({'type': 'error', 'content': f'LLM 调用失败: {e}'}, ensure_ascii=False)}\n\n"
                     break

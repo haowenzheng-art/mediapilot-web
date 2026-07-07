@@ -1,5 +1,8 @@
 """
-知乎热榜爬虫
+DEPRECATED — 2026/07 起被 SixtysZhihuScraper（backend/scrapers/sixtys.py）替代，
+不再被 backend/core/platform_api.py import。保留仅作历史参考，
+下一个清理周期可删除（建议保留至 2026/12）。
+原知乎热榜爬虫
 """
 from typing import List, Dict, Any
 from bs4 import BeautifulSoup
