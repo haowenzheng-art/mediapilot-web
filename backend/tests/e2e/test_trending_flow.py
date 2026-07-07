@@ -113,3 +113,73 @@ class TestTrendingSearchE2E:
         # 文章内容缺 url
         r3 = client.post("/api/v1/trending/article/content", json={"source": "抖音"})
         assert r3.status_code in [400, 401, 422]
+
+
+class TestTrendingV3Fields:
+    """v3 改造：失败检测 + baidu 加重 + UI 透明化字段
+
+    验证 TrendingSearchResponse 包含新字段（freshness / degraded_platforms /
+    sixty_failed_platforms / used_cache / cached_at）。
+    """
+
+    def test_response_includes_v3_fields(self, client, auth_headers):
+        """无论数据源是否成功，响应都必须包含 v3 新字段"""
+        r = client.post("/api/v1/trending/search", json={
+            "keyword": "AI 写作",
+            "platforms": ["baidu", "weibo"],
+            "days": 7,
+        }, headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        # v3 新字段必须存在
+        assert "freshness" in data
+        assert "degraded_platforms" in data
+        assert "sixty_failed_platforms" in data
+        assert "used_cache" in data
+        # freshness 必须是合法值
+        assert data["freshness"] in ("fresh", "stale", "degraded")
+
+    def test_sixty_failure_degrades_freshness(self, client, auth_headers, monkeypatch):
+        """60s-api 失败时 freshness='degraded' + sixty_failed_platforms 非空"""
+        # monkeypatch 60s 端点 scraper 抛错
+        from backend.scrapers.sixtys import (
+            SixtysWeiboScraper,
+            SixtysZhihuScraper,
+            SixtysDouyinScraper,
+        )
+
+        async def boom(self, keyword, days):
+            raise RuntimeError("60s-api mock failure")
+
+        monkeypatch.setattr(SixtysWeiboScraper, "search", boom)
+        monkeypatch.setattr(SixtysZhihuScraper, "search", boom)
+        monkeypatch.setattr(SixtysDouyinScraper, "search", boom)
+
+        # 禁用 trending_cache 让请求一定打到 60s
+        from backend.config.settings import settings
+        monkeypatch.setattr(settings, "TRENDING_CACHE_ENABLED", False)
+
+        r = client.post("/api/v1/trending/search", json={
+            "keyword": "mock_fail_keyword_unique",
+            "platforms": ["weibo", "zhihu"],
+            "days": 7,
+        }, headers=auth_headers)
+        assert r.status_code == 200
+        data = r.json()["data"]
+        # 60s 失败 ≥2 → freshness=degraded
+        assert data["freshness"] == "degraded"
+        # 失败的 60s 平台被列出
+        assert set(data["sixty_failed_platforms"]) >= {"weibo", "zhihu"}
+
+    def test_cache_disabled_response_uses_cache_false(self, client, auth_headers, monkeypatch):
+        """缓存禁用时 used_cache=False"""
+        from backend.config.settings import settings
+        monkeypatch.setattr(settings, "TRENDING_CACHE_ENABLED", False)
+
+        r = client.post("/api/v1/trending/search", json={
+            "keyword": "cache_off_unique_test",
+            "platforms": ["baidu"],
+            "days": 7,
+        }, headers=auth_headers)
+        assert r.status_code == 200
+        assert r.json()["data"]["used_cache"] is False

@@ -23,6 +23,11 @@
 - **剪辑时间轴可视化**（`web/src/components/video-edit/TimelineBar.jsx`）：横向 bar（宽度=originalDuration），绿=保留段 / 红=删除段叠加，hover 显示删除原因（reason + text），10% 间隔刻度尺 + 图例
 - **VideoEditPage 改造**：hasResult 时右栏结构改为「播放器 → 统计 → 时间轴 → 删除列表 → 干净转写 → 任务 ID」，下载按钮保留
 - **热点搜索降级 / 缓存 提示条**（`HotSearchPage` + 新组件 `DegradedNotice`）：freshness=degraded 显示黄色提示"部分平台数据获取失败 + 已自动用百度新闻补充"；used_cache=true 显示蓝色提示"命中缓存（X 秒前）"
+- **流式 SSE 端到端测试**（`backend/tests/e2e/test_stream_flow.py`，6 cases）：覆盖 copywriting + shoot-script `/generate/stream` SSE 协议正确性（content 事件 + meta 收尾 + [DONE]）、401 未授权、429 配额不足、`enable_reasoning` 透传
+- **Preview 端点测试**（`test_video_edit_flow.py::TestPreview`，6 cases）：覆盖 404 不存在 / 401 未授权 / 400 未完成 / 200 完成+inline+Accept-Ranges / 404 preview 文件缺失 / 跨用户 404
+- **TTLCache 单测**（`backend/tests/unit/test_cache.py`，14 cases）：覆盖 miss / 命中 / 过期 / 自定义 TTL / invalidate 单条/全清 / 命中率统计 / `make_cache_key` 边界
+- **Trending v3 字段 + 失败检测 e2e**（`test_trending_flow.py::TestTrendingV3Fields`，3 cases）：覆盖响应必含 v3 新字段、60s 失败时 freshness=degraded + sixty_failed_platforms 非空、缓存禁用时 used_cache=false
+- **bug 修复**：shoot_script `generate_stream` 漏 yield `meta` 事件，前端流式完成后 result 写入失败
 - **视频剪辑 360p preview**（`backend/services/video_edit_service.py`）：`_ffmpeg_make_preview` 360p + crf 28 + b:v 600k + aac 64k + `+faststart`，10min ≈ 50MB。`_do_edit_pipeline` 末尾接入，失败兜底（preview_video_path=None，任务仍 completed）
 - **VideoEditTask 表加 preview 字段**（`backend/models/database/tables.py`）：`preview_video_path` + `preview_size_bytes`，nullable
 - **Preview 视频端点** `GET /api/v1/media/video-edit/{task_id}/preview`：FileResponse + `Accept-Ranges: bytes` + `Cache-Control: private, max-age=3600` + `Content-Disposition: inline`。用户先 preview 满意再下载原画质

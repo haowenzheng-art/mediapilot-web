@@ -124,6 +124,9 @@ class ShootScriptService:
                 elif event.get("type") == "error":
                     yield event
                     return
+                elif event.get("type") == "meta":
+                    # meta 事件包含最终 parsed，yield 给前端 useReasoningStreamRequest 消费
+                    yield event
         except Exception as e:
             logger.error(f"AI 流式生成失败: {e}")
             yield {"type": "error", "delta": f"AI 生成失败: {e}"}
