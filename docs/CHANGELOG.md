@@ -14,6 +14,11 @@
 - **口播文案流式端点** `POST /api/v1/copywriting/generate/stream`：SSE 协议，复用 `/generate` 配额预扣/退款逻辑，事件 `{choices:[{delta:{content|reasoning_content}}]}` + meta.parsed 收尾事件
 - **拍摄脚本流式端点** `POST /api/v1/shoot-script/generate/stream`：与 copywriting/stream 同协议；shots 整体性强，仍按"完成再渲染"，但 content 流式填入 + reasoning 折叠区
 - **`enable_reasoning` 字段**：`CopywritingGenerateRequest` + `ShootScriptRequest` 都加 `enable_reasoning: bool = True`，前端 toggle 透传到后端
+- **前端 SSE 流式消费**（`web/src/services/copywriting.js` + `web/src/services/shoot-script.js`）：`generateStream` async generator，fetch + reader + TextDecoder 解析 SSE 行，转换 OpenAI 兼容事件为内部 `{type, delta, meta}` 格式
+- **`useReasoningStreamRequest` Hook 集成**（`use-copywriting.js` + `use-shoot-script.js`）：双字段累积（reasoning + content），含 `enableReasoning` localStorage 持久化（默认开启）、meta 事件触发 result 写入
+- **`ReasoningToggle` 通用组件**（`web/src/components/common/ReasoningToggle.jsx`）：开关式 toggle，CSS vars 主题适配，hint tooltip 解释作用
+- **CopywritingPage 流式渲染**：新增 `StreamingCopywritingView` + `ReasoningPanel` 组件，实时按行解析 title/hooks/content 三段，标题和钩子边收边渲染，"文案正文" 边填边显示"生成中"标记
+- **ShootScriptPage 流式渲染**：新增 `StreamingIndicator` 组件（shots 整体性强按完成再渲染），流式阶段只显示 thinking 折叠区 + 进度提示，完成后再渲染 ScriptInfo + ShotList
 - **视频剪辑 360p preview**（`backend/services/video_edit_service.py`）：`_ffmpeg_make_preview` 360p + crf 28 + b:v 600k + aac 64k + `+faststart`，10min ≈ 50MB。`_do_edit_pipeline` 末尾接入，失败兜底（preview_video_path=None，任务仍 completed）
 - **VideoEditTask 表加 preview 字段**（`backend/models/database/tables.py`）：`preview_video_path` + `preview_size_bytes`，nullable
 - **Preview 视频端点** `GET /api/v1/media/video-edit/{task_id}/preview`：FileResponse + `Accept-Ranges: bytes` + `Cache-Control: private, max-age=3600` + `Content-Disposition: inline`。用户先 preview 满意再下载原画质

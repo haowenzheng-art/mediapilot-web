@@ -1,8 +1,9 @@
 /**
  * 拍摄脚本 Hook
  */
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useEffect } from 'react'
 import { shootScriptService } from '../services/shoot-script'
+import { useReasoningStreamRequest } from './use-reasoning-stream-request'
 
 const PLATFORMS = [
   { id: 'douyin', name: '抖音', icon: '📱', description: '竖屏短视频，可选 60/120/180 秒' },
@@ -22,6 +23,17 @@ const STYLES = [
   { id: 'professional', name: '专业分析', icon: '💼', description: '数据驱动，专业严谨' }
 ]
 
+const REASONING_STORAGE_KEY = 'shoot_script:enable_reasoning'
+
+function readEnableReasoning() {
+  try {
+    const v = localStorage.getItem(REASONING_STORAGE_KEY)
+    return v === null ? true : v === '1'
+  } catch {
+    return true
+  }
+}
+
 export function useShootScript() {
   const [topic, setTopic] = useState('')
   const [platform, setPlatform] = useState('douyin')
@@ -32,7 +44,31 @@ export function useShootScript() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
 
-  // 生成脚本
+  const [enableReasoning, setEnableReasoningState] = useState(readEnableReasoning)
+  const setEnableReasoning = useCallback((val) => {
+    setEnableReasoningState(val)
+    try {
+      localStorage.setItem(REASONING_STORAGE_KEY, val ? '1' : '0')
+    } catch {}
+  }, [])
+
+  const streamFn = useCallback(
+    (t, p, st, pe, dur, options) =>
+      shootScriptService.generateStream(t, p, st, pe, dur, options),
+    []
+  )
+  const {
+    reasoning,
+    content,
+    reasoningSupported,
+    meta,
+    isStreaming,
+    error: streamError,
+    run: runStream,
+    reset: resetStream,
+  } = useReasoningStreamRequest(streamFn)
+
+  // 生成脚本（流式）
   const generate = useCallback(async () => {
     if (!topic.trim()) {
       setError('请输入话题')
@@ -41,23 +77,26 @@ export function useShootScript() {
 
     setLoading(true)
     setError(null)
+    setResult(null)
+    resetStream()
 
     try {
-      // B 站不支持自定义时长，传 null 让后端走默认
       const dur = platform === 'bilibili' ? null : duration
-      const data = await shootScriptService.generate(topic, platform, style, persona, dur)
-      if (data.success) {
-        setResult(data.data)
-      } else {
-        setError(data.message || '生成失败')
-      }
+      await runStream(topic, platform, style, persona, dur, { enableReasoning })
     } catch (err) {
       setError('生成失败，请稍后重试')
       console.error('生成拍摄脚本失败:', err)
     } finally {
       setLoading(false)
     }
-  }, [topic, platform, style, persona, duration])
+  }, [topic, platform, style, persona, duration, runStream, enableReasoning, resetStream])
+
+  // 流式完成（meta.final=true）后从 meta.parsed 写入 result state
+  useEffect(() => {
+    if (meta?.final && meta?.parsed) {
+      setResult(meta.parsed)
+    }
+  }, [meta])
 
   // 导出脚本
   const exportScript = useCallback(async (format) => {
@@ -114,6 +153,11 @@ export function useShootScript() {
     persona, setPersona,
     result, setResult,
     loading, error, setError,
+    // 流式相关
+    enableReasoning, setEnableReasoning,
+    reasoning, content, reasoningSupported,
+    isStreaming,
+    streamError,
     generate,
     exportScript,
     regenerate,

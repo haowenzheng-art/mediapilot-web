@@ -8,15 +8,89 @@ import { getToken } from './auth'
 
 export const shootScriptService = {
   /**
-   * 生成拍摄脚本
+   * 生成拍摄脚本（阻塞）
    */
   async generate(topic, platform, style, persona, duration_seconds) {
-    const body = { topic, platform, style, persona }
+    const body = { topic, platform, style, persona, enable_reasoning: true }
     if (duration_seconds) body.duration_seconds = duration_seconds
     return request('/api/v1/shoot-script/generate', {
       method: 'POST',
       body: JSON.stringify(body),
     })
+  },
+
+  /**
+   * 流式生成拍摄脚本（SSE）
+   *
+   * 后端 POST /api/v1/shoot-script/generate/stream
+   * 事件格式与 copywriting/stream 一致（OpenAI 兼容 + reasoning_content + meta.parsed）
+   *
+   * @param {string} topic
+   * @param {string} platform
+   * @param {string} style
+   * @param {string} persona
+   * @param {number|null} duration_seconds
+   * @param {object} options - { enableReasoning }
+   */
+  async *generateStream(topic, platform, style, persona, duration_seconds, options = {}) {
+    const body = {
+      topic,
+      platform,
+      style,
+      persona,
+      enable_reasoning: options.enableReasoning ?? true,
+    }
+    if (duration_seconds) body.duration_seconds = duration_seconds
+
+    const response = await fetch(`${API_BASE_URL}/api/v1/shoot-script/generate/stream`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Accept': 'text/event-stream' },
+      credentials: 'include',
+      body: JSON.stringify(body),
+    })
+
+    if (!response.ok) {
+      throw new Error(`API请求失败: ${response.status}`)
+    }
+
+    const reader = response.body.getReader()
+    const decoder = new TextDecoder()
+
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+
+      const chunk = decoder.decode(value)
+      const lines = chunk.split('\n')
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const data = line.slice(6).trim()
+          if (!data || data === '[DONE]') continue
+          try {
+            const parsed = JSON.parse(data)
+            if (parsed.error) {
+              yield { type: 'error', delta: parsed.error }
+              continue
+            }
+            const choice = parsed.choices?.[0]
+            if (!choice) continue
+            const delta = choice.delta || {}
+            if (delta.content) {
+              yield { type: 'content', delta: delta.content }
+            }
+            if (delta.reasoning_content) {
+              yield { type: 'reasoning', delta: delta.reasoning_content }
+            }
+            if (parsed.meta) {
+              yield { type: 'meta', meta: parsed.meta }
+            }
+          } catch (e) {
+            // 忽略 JSON 解析错误（SSE 行可能不完整）
+          }
+        }
+      }
+    }
   },
 
   /**

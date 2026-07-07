@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { useCopywriting } from '../../hooks/use-copywriting'
 import { copywritingService } from '../../services/copywriting'
 import PageContainer from '../../components/common/PageContainer'
+import { ReasoningToggle } from '../../components/common/ReasoningToggle'
 
 function PersonaInput({ persona, setPersona, personas, onCreatePersona, onSelectPersona }) {
   const [showNewInput, setShowNewInput] = useState(false)
@@ -289,6 +290,150 @@ function RewriteOptions({ onRewrite, rewriteDirections, loading }) {
   )
 }
 
+function ReasoningPanel({ reasoning }) {
+  // 流式期间显示思考过程（折叠区，默认展开）
+  if (!reasoning) return null
+  return (
+    <details
+      open
+      style={{
+        marginBottom: '16px',
+        padding: '12px 16px',
+        background: 'var(--bg-secondary)',
+        border: '1px dashed var(--border-color)',
+        borderRadius: '8px',
+      }}
+    >
+      <summary
+        style={{
+          fontSize: '12px',
+          fontWeight: '600',
+          color: 'var(--text-tertiary)',
+          cursor: 'pointer',
+          userSelect: 'none',
+        }}
+      >
+        🧠 思考过程（{reasoning.length} 字）
+      </summary>
+      <div
+        style={{
+          marginTop: '8px',
+          fontSize: '12px',
+          lineHeight: '1.6',
+          color: 'var(--text-tertiary)',
+          whiteSpace: 'pre-wrap',
+          fontFamily: 'var(--font-mono, monospace)',
+        }}
+      >
+        {reasoning}
+      </div>
+    </details>
+  )
+}
+
+function StreamingCopywritingView({ content, reasoning, reasoningSupported }) {
+  // 流式阶段显示：thinking 折叠区 + 实时拼接的 content（按行尝试解析 title/hooks）
+  const lines = (content || '').split('\n')
+  let title = ''
+  let inHooks = false
+  let inContent = false
+  const hooks = []
+  let contentBody = ''
+
+  for (const line of lines) {
+    const trimmed = line.trim()
+    if (!trimmed) continue
+    if (trimmed.startsWith('标题：')) {
+      title = trimmed.replace('标题：', '').trim()
+    } else if (trimmed.startsWith('钩子')) {
+      inHooks = true
+      inContent = false
+    } else if (trimmed.startsWith('文案正文') || trimmed.startsWith('正文')) {
+      inContent = true
+      inHooks = false
+    } else if (inHooks) {
+      let hook = trimmed
+      if (hook.startsWith(('1.', '2.', '3.'))) {
+        hook = hook.split('.', 1)[1].trim()
+      }
+      hooks.push(hook)
+    } else if (inContent) {
+      contentBody += line + '\n'
+    }
+  }
+
+  return (
+    <div
+      style={{
+        padding: '24px',
+        background: 'var(--bg-secondary)',
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+      }}
+    >
+      {reasoningSupported && <ReasoningPanel reasoning={reasoning} />}
+
+      {title && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '4px' }}>
+            标题
+          </div>
+          <div style={{ fontSize: '18px', fontWeight: '600', color: 'var(--text-primary)' }}>
+            {title}
+          </div>
+        </div>
+      )}
+
+      {hooks.length > 0 && (
+        <div style={{ marginBottom: '16px' }}>
+          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
+            钩子（生成中…）
+          </div>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+            {hooks.map((hook, idx) => (
+              <div
+                key={idx}
+                style={{
+                  padding: '10px 14px',
+                  background: 'var(--bg-primary)',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  color: 'var(--text-primary)',
+                }}
+              >
+                {idx + 1}. {hook}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <div>
+        <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginBottom: '8px' }}>
+          文案正文
+          <span style={{ marginLeft: '8px', color: 'var(--accent-primary)' }}>● 生成中</span>
+        </div>
+        <div
+          style={{
+            padding: '16px',
+            background: 'var(--bg-primary)',
+            borderRadius: '8px',
+            fontSize: '14px',
+            lineHeight: '1.8',
+            color: 'var(--text-primary)',
+            whiteSpace: 'pre-wrap',
+            minHeight: '120px',
+          }}
+        >
+          {contentBody || (
+            <span style={{ color: 'var(--text-tertiary)' }}>AI 正在创作中…</span>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 function CopywritingResult({ result, onCopy, onRewrite, rewriteDirections, loading }) {
   if (!result) return null
 
@@ -382,7 +527,11 @@ function CopywritingPage() {
     loading, error, setError,
     generate, rewrite, copyResult,
     modes, rewriteDirections,
-    createPersona, selectPersona
+    createPersona, selectPersona,
+    // v3 流式
+    enableReasoning, setEnableReasoning,
+    reasoning, content, reasoningSupported,
+    isStreaming,
   } = useCopywriting()
 
   useEffect(() => {
@@ -444,6 +593,13 @@ function CopywritingPage() {
 
         <ModeSelector mode={mode} setMode={setMode} modes={modes} />
 
+        <div style={{ marginBottom: '16px' }}>
+          <ReasoningToggle
+            enabled={enableReasoning}
+            onChange={setEnableReasoning}
+          />
+        </div>
+
         <ContentInput
           mode={mode}
           topic={topic}
@@ -487,21 +643,35 @@ function CopywritingPage() {
           {loading ? (
             <>
               <span className="loading-spinner" style={{ marginRight: '8px' }}></span>
-              生成中...
+              生成中…
             </>
           ) : (
             '生成文案'
           )}
         </button>
 
+        {/* 流式阶段：实时渲染 reasoning + content */}
+        {isStreaming && !result && (
+          <div style={{ marginTop: '24px' }}>
+            <StreamingCopywritingView
+              content={content}
+              reasoning={reasoning}
+              reasoningSupported={reasoningSupported}
+            />
+          </div>
+        )}
+
+        {/* 流式完成后：渲染最终结果 */}
         {result && (
-          <CopywritingResult
-            result={result}
-            onCopy={copyResult}
-            onRewrite={handleRewrite}
-            rewriteDirections={rewriteDirections}
-            loading={loading}
-          />
+          <div style={{ marginTop: '24px' }}>
+            <CopywritingResult
+              result={result}
+              onCopy={copyResult}
+              onRewrite={handleRewrite}
+              rewriteDirections={rewriteDirections}
+              loading={loading}
+            />
+          </div>
         )}
       </div>
     </PageContainer>

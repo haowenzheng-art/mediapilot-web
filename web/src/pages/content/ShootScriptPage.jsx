@@ -4,6 +4,83 @@ import PageContainer from '../../components/common/PageContainer'
 import PlatformSelector from '../../components/content/PlatformSelector'
 import StyleSelector from '../../components/content/StyleSelector'
 import ShotList from '../../components/content/ShotList'
+import { ReasoningToggle } from '../../components/common/ReasoningToggle'
+
+function StreamingIndicator({ reasoning, reasoningSupported }) {
+  // shots 整体性强，仍按完成再渲染；流式阶段只显示思考过程 + 进度提示
+  return (
+    <div
+      style={{
+        marginTop: '32px',
+        padding: '24px',
+        background: 'var(--bg-secondary)',
+        borderRadius: '12px',
+        border: '1px solid var(--border-color)',
+      }}
+    >
+      {reasoningSupported && reasoning && (
+        <details
+          open
+          style={{
+            marginBottom: '16px',
+            padding: '12px 16px',
+            background: 'var(--bg-primary)',
+            border: '1px dashed var(--border-color)',
+            borderRadius: '8px',
+          }}
+        >
+          <summary
+            style={{
+              fontSize: '12px',
+              fontWeight: '600',
+              color: 'var(--text-tertiary)',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            🧠 思考过程（{reasoning.length} 字）
+          </summary>
+          <div
+            style={{
+              marginTop: '8px',
+              fontSize: '12px',
+              lineHeight: '1.6',
+              color: 'var(--text-tertiary)',
+              whiteSpace: 'pre-wrap',
+              fontFamily: 'var(--font-mono, monospace)',
+            }}
+          >
+            {reasoning}
+          </div>
+        </details>
+      )}
+
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '12px',
+          padding: '16px',
+          background: 'var(--bg-primary)',
+          borderRadius: '8px',
+        }}
+      >
+        <span
+          className="loading-spinner"
+          style={{ fontSize: '20px', color: 'var(--accent-primary)' }}
+        />
+        <div style={{ flex: 1 }}>
+          <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)' }}>
+            AI 正在生成拍摄脚本…
+          </div>
+          <div style={{ fontSize: '12px', color: 'var(--text-tertiary)', marginTop: '4px' }}>
+            分镜头脚本需要完整生成后才能渲染，正在等待后端完成…
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
 
 function ScriptInfo({ result, onCopy, onExport, onRegenerate }) {
   if (!result) return null
@@ -239,7 +316,11 @@ function ShootScriptPage() {
     copyScript,
     platforms,
     durations,
-    styles
+    styles,
+    // v3 流式
+    enableReasoning, setEnableReasoning,
+    reasoning, reasoningSupported,
+    isStreaming,
   } = useShootScript()
 
   const handleExport = (format) => {
@@ -373,6 +454,14 @@ function ShootScriptPage() {
           disabled={loading}
         />
 
+        {/* v3：深度思考开关 */}
+        <div style={{ marginBottom: '16px' }}>
+          <ReasoningToggle
+            enabled={enableReasoning}
+            onChange={setEnableReasoning}
+          />
+        </div>
+
         {/* 错误提示 */}
         {error && (
           <div style={{
@@ -408,7 +497,7 @@ function ShootScriptPage() {
           {loading ? (
             <>
               <span className="loading-spinner" style={{ marginRight: '8px' }}></span>
-              生成中...
+              生成中…
             </>
           ) : (
             <>
@@ -417,6 +506,14 @@ function ShootScriptPage() {
             </>
           )}
         </button>
+
+        {/* 流式阶段：thinking 折叠区 + 进度提示（shots 仍按完成再渲染） */}
+        {isStreaming && !result && (
+          <StreamingIndicator
+            reasoning={reasoning}
+            reasoningSupported={reasoningSupported}
+          />
+        )}
 
         {/* 生成结果 */}
         {result && (
