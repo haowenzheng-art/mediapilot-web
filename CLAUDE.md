@@ -327,6 +327,17 @@
 
 ## 更新日志
 
+### 2026-07-08
+- 清 v3 测试老债：12 个 fail → 0（全量 455 passed / 4 skip，另有 1 个 live-AI flaky 见下）
+- P0 真 bug 修复：`copywriting_service.get_copywriting` 缺 `def` 函数头的孤儿代码补全 —— 前端「再改改」改写此前直接 500，现恢复
+- 删死代码：`platform_api._fetch_{weibo,douyin,xiaohongshu}_trending` + `_mock_hot_topics`（v2 遗留，全项目无调用），连带删/重写测死代码的用例。原则：没有真实数据源就如实 degraded 降级，绝不用 mock 假数据冒充
+- `test_platform_api` 重写：mock scraper 网络边界（合法 I/O 打桩），验证真实聚合/排序/降级契约，含「无数据源→topics 为空、进 degraded_platforms」用例固化原则
+- `test_trending_service` 修正：断言从不存在的 `platform`/`trend` 字段 → 真实契约 `source`/`heat_value`/`trend_direction`；mock 掉网络保证确定性
+- `test_calendar_service` 修复：`create_event` 测试补 `db.flush()` 回填 id/created_at 的打桩（原 mock_event 是摆设，未被 service 使用）
+- 测试基建修复：`conftest.db_setup` 把 `media_service.SessionLocal` 重定向到测试内存引擎 —— 后台异步任务此前自建 session 写向生产库，导致 TestClient 内存库永远读不到任务结果；media 集成测试改轮询后现可确定性完成
+- ⚠️ 遗留 flaky：`test_copywriting_flow.py::test_rewrite_each_direction[more_colloquial]` 依赖真实 AI 返回可解析非空 content，偶发空返回致断言失败（复跑即过）。非本次改动引入，待决定是否 mock AI 固定化
+- ⚠️ 待清理：`CompetitorAPI` / `_mock_competitors`（对标账号）功能已在 2026-05-14 标记清理，但类+mock+测试仍在，属同类死 mock 债
+
 ### 2026-06-20
 - 完成需求 6：音视频转写（前端接入真实 `/api/v1/media/upload` + 轮询 `/media/task/{id}`，替换 mock）
 - 新增前端服务 `web/src/services/media.js`（uploadMedia / getMediaTask / pollMediaTask）
@@ -354,6 +365,16 @@
 - 开始 Phase 1 开发
 
 ---
+
+## 数据真实性原则（重要）
+
+**不用 mock 假数据冒充做不了的功能。** 没有真实数据源 / 服务不可用时，必须如实降级
+（degraded / 报错 / 返回空），让用户明确知道「这个源暂时没有」，绝不用模板拼的假数据糊弄。
+
+- 热点搜索：平台无可用 scraper → 标 `degraded_platforms`，前端黄条提示，topics 不塞假数据
+- 文案生成：AI 不可用 → 抛错，不回退「X运营技巧」这类模板 mock（污染用户内容）
+- 测试里 mock 只用于**打桩 I/O 边界**（网络 / DB / 外部 API）以获得确定性，
+  不用于伪造产品功能。测「无数据源」时应断言「如实降级」，而非「返回 mock」
 
 ## AI 内容格式规范
 

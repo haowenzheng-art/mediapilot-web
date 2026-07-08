@@ -97,11 +97,16 @@ class TestMediaTaskAPI:
         )
         task_id = upload_resp.json()["data"]["task_id"]
 
-        time.sleep(1)
+        # 后台任务异步处理，轮询推进事件循环直到离开 pending（最多 ~10s）
+        data = None
+        for _ in range(50):
+            response = client.get(f"/api/v1/media/task/{task_id}", headers=auth_headers)
+            assert response.status_code == 200
+            data = response.json()
+            if data["data"]["status"] != "pending":
+                break
+            time.sleep(0.2)
 
-        response = client.get(f"/api/v1/media/task/{task_id}", headers=auth_headers)
-        assert response.status_code == 200
-        data = response.json()
         assert data["success"] is True
         assert data["data"]["status"] in ["processing", "completed", "failed"]
 
@@ -119,11 +124,16 @@ class TestMediaTaskAPI:
         )
         task_id = upload_resp.json()["data"]["task_id"]
 
-        time.sleep(1)
+        # 轮询推进后台处理直到进入终态（最多 ~10s）
+        result = None
+        for _ in range(50):
+            response = client.get(f"/api/v1/media/task/{task_id}", headers=auth_headers)
+            assert response.status_code == 200
+            result = response.json()["data"]
+            if result["status"] in ["completed", "failed"]:
+                break
+            time.sleep(0.2)
 
-        response = client.get(f"/api/v1/media/task/{task_id}", headers=auth_headers)
-        assert response.status_code == 200
-        result = response.json()["data"]
         assert result["status"] == "completed"
         assert "transcript" in result
         assert "outline" in result

@@ -247,6 +247,8 @@ xxx
         )
 
         return result
+
+    async def get_copywriting(self, copywriting_id: str, db: Session) -> Optional[CopywritingResponse]:
         """从数据库获取文案（同步，不经过 AI）"""
         repo = self._get_repo(db)
         cw = repo.get_by_id(copywriting_id)

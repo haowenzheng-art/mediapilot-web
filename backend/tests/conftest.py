@@ -46,7 +46,17 @@ def db_setup():
     Base.metadata.drop_all(bind=test_engine)
     Base.metadata.create_all(bind=test_engine)
     app.dependency_overrides[get_db] = _override_get_db
+
+    # 后台异步任务（如 media 转写）自建 SessionLocal()，绕过了 get_db override，
+    # 默认写向生产库文件，导致 TestClient 用的内存库永远读不到任务结果。
+    # 把这些模块级 SessionLocal 重定向到测试引擎，保证 bg 任务与请求共享同一库。
+    import backend.services.media_service as _media_mod
+    _orig_media_session = _media_mod.SessionLocal
+    _media_mod.SessionLocal = TestSessionLocal
+
     yield
+
+    _media_mod.SessionLocal = _orig_media_session
     app.dependency_overrides.clear()
     Base.metadata.drop_all(bind=test_engine)
 

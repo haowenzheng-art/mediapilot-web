@@ -71,16 +71,46 @@ class TestTrendingService:
         assert result_max.total_count >= 0
 
     async def test_search_returns_topic_attributes(self):
-        """Test returned topic object has correct attributes"""
-        result = await self.service.search(
-            keyword="test",
-            platforms=["douyin"],
-            days=7
+        """返回的 topic 暴露真实契约字段：source / heat_value / trend_direction。
+
+        历史断言里的 platform / trend 字段从未在 HotTopicResponse 中存在，
+        属测试写错。此处 mock 掉 platform_api 网络边界，保证确定性、不打实时网络。
+        """
+        from datetime import datetime
+        from unittest.mock import AsyncMock, patch
+        from backend.core.platform_api import HotTopicSearchResult
+
+        fake = HotTopicSearchResult(
+            topics=[{
+                "title": "test 热点",
+                "summary": "关于 test 的摘要",
+                "source": "抖音热榜",
+                "source_url": "https://example.com/x",
+                "category": "综合",
+                "heat_value": 12345,
+                "trend_direction": "up",
+                "published_at": datetime.now(),
+                "crawled_at": datetime.now(),
+                "keywords": "test",
+                "image_url": "",
+            }],
+            degraded_platforms=[],
+            sixty_failed_platforms=[],
+            freshness="fresh",
         )
 
-        if result.hot_topics:
-            topic = result.hot_topics[0]
-            # Check Pydantic model attributes
-            assert hasattr(topic, 'title')
-            assert hasattr(topic, 'platform')
-            assert hasattr(topic, 'trend')
+        with patch.object(
+            self.service.platform_api, "search_hot_topics",
+            new=AsyncMock(return_value=fake)
+        ):
+            result = await self.service.search(
+                keyword="test", platforms=["douyin"], days=7
+            )
+
+        assert result.hot_topics, "mock 数据应产出至少一条热点"
+        topic = result.hot_topics[0]
+        assert hasattr(topic, 'title')
+        assert hasattr(topic, 'source')
+        assert hasattr(topic, 'heat_value')
+        assert hasattr(topic, 'trend_direction')
+        assert topic.source == "抖音热榜"

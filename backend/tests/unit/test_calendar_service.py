@@ -44,12 +44,19 @@ def sample_event_data():
 
 def test_create_event_success(calendar_service, mock_db, mock_user, sample_event_data):
     """测试成功创建事件"""
-    # Mock database operations - return configured object
-    mock_event = Mock()
-    mock_event.id = 1
-    mock_event.title = sample_event_data.title
-    mock_event.content = sample_event_data.content
-    mock_event.user_id = mock_user.id
+    # create_event 内部自建 CalendarEventTable，靠 db.flush() 拿 DB 回填的
+    # id / created_at。db 是 mock，需模拟 flush 时数据库对新对象的赋值，
+    # 否则 id/created_at 为 None，CalendarEventResponse 校验失败。
+    added = {}
+    mock_db.add.side_effect = lambda obj: added.__setitem__("obj", obj)
+
+    def fake_flush():
+        obj = added["obj"]
+        obj.id = 1
+        obj.created_at = datetime.now()
+        obj.updated_at = None
+
+    mock_db.flush.side_effect = fake_flush
 
     result = calendar_service.create_event(mock_db, mock_user.id, sample_event_data)
 

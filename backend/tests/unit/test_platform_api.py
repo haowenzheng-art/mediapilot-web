@@ -15,8 +15,37 @@ from backend.core.platform_api import (
 )
 
 
+def _fake_topic(title: str, source: str, heat_value: float) -> dict:
+    """构造一条 scraper 归一化后的热点（source/heat_value/trend_direction 契约）。
+
+    注意：platform/heat_index/trend 是下游 HotTopicResponse 的字段，
+    不属于 search_hot_topics 这一层，故此处按 scraper 真实契约断言。
+    """
+    return {
+        "title": title,
+        "summary": f"{title}的摘要",
+        "source": source,
+        "source_url": "https://example.com/x",
+        "category": "综合",
+        "heat_value": heat_value,
+        "trend_direction": "up",
+    }
+
+
+def _fake_scraper(topics: list):
+    """把网络边界打桩成返回固定 topics 的假 scraper（不碰真实 60s-api）。"""
+    scraper = MagicMock()
+    scraper.search = AsyncMock(return_value=topics)
+    return scraper
+
+
 class TestHotTopicAPI:
-    """热点API测试"""
+    """热点API测试
+
+    v3 原则：scraper 是唯一真实数据源，没有可用源就如实降级（degraded），
+    绝不用 mock 假数据冒充。以下测试把 scraper 网络边界打桩，验证真实的
+    聚合 / 排序 / 降级逻辑，不依赖实时网络。
+    """
 
     @pytest.fixture
     def api(self):
@@ -24,92 +53,71 @@ class TestHotTopicAPI:
         return HotTopicAPI()
 
     @pytest.mark.asyncio
-    async def test_search_hot_topics_weibo(self, api):
-        """测试微博热搜搜索"""
-        result = await api.search_hot_topics(
-            keyword="AI",
-            platforms=["weibo"],
-            days=7
-        )
+    async def test_search_hot_topics_happy_path(self, api):
+        """真实数据源可用时，热点按 scraper 契约透传"""
+        api.scrapers = {"weibo": _fake_scraper([
+            _fake_topic("AI 大模型爆发", "微博热搜", 90000),
+        ])}
 
-        # v3 改造：search_hot_topics 返回 HotTopicSearchResult dataclass
+        result = await api.search_hot_topics(keyword="AI", platforms=["weibo"], days=7)
+
         topics = result.topics
-        assert len(topics) > 0
-        assert topics[0]["platform"] == "weibo"
-        assert "title" in topics[0]
-        assert "heat_index" in topics[0]
-        assert "trend" in topics[0]
+        assert len(topics) == 1
+        assert topics[0]["title"] == "AI 大模型爆发"
+        assert topics[0]["source"] == "微博热搜"
+        assert topics[0]["heat_value"] == 90000
+        assert result.degraded_platforms == []
+
+    @pytest.mark.asyncio
+    async def test_search_hot_topics_degraded_when_no_source(self, api):
+        """核心原则：没有真实数据源时如实降级，topics 为空，绝不塞假数据"""
+        api.scrapers = {}
+
+        result = await api.search_hot_topics(keyword="AI", platforms=["weibo"], days=7)
+
+        assert result.topics == []
+        assert "weibo" in result.degraded_platforms
 
     @pytest.mark.asyncio
     async def test_search_hot_topics_multiple_platforms(self, api):
-        """测试多平台热搜搜索"""
+        """多平台：各自 scraper 有数据时都进入结果"""
+        api.scrapers = {
+            "douyin": _fake_scraper([_fake_topic("抖音热点", "抖音热榜", 50000)]),
+            "xiaohongshu": _fake_scraper([_fake_topic("小红书热点", "小红书", 40000)]),
+        }
+
         result = await api.search_hot_topics(
-            keyword="科技",
-            platforms=["douyin", "xiaohongshu"],
-            days=3
+            keyword="科技", platforms=["douyin", "xiaohongshu"], days=3
         )
 
-        topics = result.topics
-        assert len(topics) > 0
-        platforms = [r["platform"] for r in topics]
-        assert "douyin" in platforms
-        assert "xiaohongshu" in platforms
+        sources = [t["source"] for t in result.topics]
+        assert "抖音热榜" in sources
+        assert "小红书" in sources
+        assert result.degraded_platforms == []
 
     @pytest.mark.asyncio
     async def test_search_hot_topics_empty_keyword(self, api):
-        """测试空关键词"""
-        result = await api.search_hot_topics(
-            keyword="",
-            platforms=["weibo"],
-            days=7
-        )
+        """测试空关键词：返回结果对象（topics 可能为空列表）"""
+        api.scrapers = {}
+        result = await api.search_hot_topics(keyword="", platforms=["weibo"], days=7)
 
-        # 即使关键词为空，也应该返回结果对象（topics 可能为空列表）
         assert hasattr(result, "topics")
         assert isinstance(result.topics, list)
 
     @pytest.mark.asyncio
-    async def test_mock_hot_topics(self, api):
-        """测试mock数据生成"""
-        result = api._mock_hot_topics(
-            keyword="测试",
-            platform="douyin",
-            days=5
-        )
-
-        assert isinstance(result, list)
-        assert len(result) == 10
-        for topic in result:
-            assert "测试" in topic["title"]
-            assert topic["platform"] == "douyin"
-            assert topic["heat_index"] > 0
-
-    @pytest.mark.asyncio
     async def test_search_hot_topics_sorted(self, api):
-        """测试结果按热度降序排列"""
-        result = await api.search_hot_topics(
-            keyword="排序",
-            platforms=["weibo"],
-            days=7
-        )
+        """测试结果按热度（heat_value）降序排列"""
+        api.scrapers = {"weibo": _fake_scraper([
+            _fake_topic("低热度", "微博热搜", 100),
+            _fake_topic("高热度", "微博热搜", 99999),
+            _fake_topic("中热度", "微博热搜", 5000),
+        ])}
+
+        result = await api.search_hot_topics(keyword="排序", platforms=["weibo"], days=7)
 
         topics = result.topics
         for i in range(1, len(topics)):
-            assert topics[i-1]["heat_index"] >= topics[i]["heat_index"]
-
-    @pytest.mark.asyncio
-    async def test_search_hot_topics_with_api_key(self, api):
-        """测试有API密钥时仍返回数据（mock模式）"""
-        api.xinbang_api_key = "test_key"
-
-        result = await api.search_hot_topics(
-            keyword="测试",
-            platforms=["weibo"],
-            days=7
-        )
-
-        assert hasattr(result, "topics")
-        assert len(result.topics) > 0
+            assert topics[i - 1]["heat_value"] >= topics[i]["heat_value"]
 
 
 class TestCompetitorAPI:
