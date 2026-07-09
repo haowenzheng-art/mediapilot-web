@@ -10,6 +10,7 @@ export const ROUTE_PATHS = {
   TOPIC_HISTORY: 'topic-history',
   TRANSCRIPTION: 'transcription',
   VIDEO_ANALYSIS: 'video-analysis',
+  VIDEO_EDIT: 'video-edit',
 }
 
 export default ROUTE_PATHS

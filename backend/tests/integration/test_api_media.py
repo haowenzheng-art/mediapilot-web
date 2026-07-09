@@ -6,7 +6,19 @@ import io
 import os
 from unittest.mock import patch
 
+from backend.config.settings import settings
 from backend.tests.conftest import TestSessionLocal
+
+
+@pytest.fixture(autouse=True)
+def force_mock_transcribe(monkeypatch, tmp_path):
+    """D 任务清理后：MediaProcessor.transcribe_audio 不再隐式降级 mock，
+    必须显式开 USE_MOCK_TRANSCRIBE 让 MediaService 走 MockMediaProcessor。
+    否则后台转写会因 transcribe_engine 未配置而 raise → task 永远进 failed。
+    """
+    monkeypatch.setattr(settings, "USE_MOCK_TRANSCRIBE", True)
+    monkeypatch.setattr(settings, "UPLOAD_DIR", str(tmp_path / "uploads"))
+    os.makedirs(settings.UPLOAD_DIR, exist_ok=True)
 
 
 @pytest.fixture

@@ -39,7 +39,7 @@ class CopywritingService:
                 scraper = ContentReferenceScraper()
                 results = await scraper.get_reference_content(
                     keyword=request.topic,
-                    platforms=["weibo", "baidu", "zhihu"],
+                    platforms=["baidu", "toutiao"],  # v4 精简：下线的 4 源不在参考里
                     max_results=3
                 )
                 await scraper.close()
@@ -99,7 +99,7 @@ class CopywritingService:
                 scraper = ContentReferenceScraper()
                 results = await scraper.get_reference_content(
                     keyword=request.topic,
-                    platforms=["weibo", "baidu", "zhihu"],
+                    platforms=["baidu", "toutiao"],  # v4 精简：下线的 4 源不在参考里
                     max_results=3
                 )
                 await scraper.close()
@@ -197,20 +197,27 @@ class CopywritingService:
         }
         direction_text = direction_map.get(direction, direction)
 
-        prompt = f"""你是一位{persona}。
+        prompt = f"""你是{persona}，正在改写一条已有的口播文案。
 
-请将以下口播文案进行改写，要求：{direction_text}
+【改写方向】{direction_text}
 
 【原文】
 标题：{original.title}
 内容：{original.content}
 
-【改写要求】
-- 保持原文的核心信息和结构
-- 根据人设{persona}的视角进行改写
-- {direction_text}，让内容更有感染力
+【改写硬要求】
+1. 打破原文结构：重新组织段落顺序 / 拆分合并句子 / 换开头/换钩子，不要"换皮重排"
+2. 人设一致性：语气、词汇、句式必须明显贴近{persona}（不只是改个称呼）
+3. 保留核心信息：原文的关键论点 / 数据 / 案例不能丢
+4. 口语化硬约束（详见下方）
+
+【口语化硬约束】
+- 短句为主，单句 ≤ 25 字
+- 禁用"大家好/今天我们来/接下来"开场
+- 段落过渡用"说回来/讲到这儿/对了"
+- 禁用书面词："本文""文章""综上所述""首先/其次/最后"
+- 结尾强引导：抛问题/争议/悬念，不写"记得点赞关注"
 - 禁止使用"#"符号
-- 格式工整
 
 【输出格式】
 标题：xxx
@@ -305,17 +312,28 @@ xxx
         return title, hooks, content
 
     def _build_prompt(self, request: CopywritingGenerateRequest, reference_content: str = "") -> str:
-        """构建AI生成提示词"""
-        base_prompt = f"""你是一位{request.persona}。
+        """构建AI生成提示词
 
-请根据以下要求创作口播文案。
+        口语化硬约束（v4 D 任务强化）：
+        - 短句为主，单句 ≤ 25 字
+        - 禁用书面连接词（然而/因此/综上所述）
+        - 禁用"大家好/今天我们来/接下来"等AI开场套话
+        - 段落过渡用口语词（说回来/讲到这儿/对了）
+        - 结尾强引导（抛问题/争议/悬念），不写"记得点赞关注"套话
+        """
+        base_prompt = f"""你是{request.persona}，正在拍一条短视频口播。
 
-【写作要求】
-- 语气像一个幽默风趣、干货满满的老师
-- 有趣的科普风格，轻松但有价值
-- 禁止使用"#"符号
-- 格式工整
-- 去除AI感，不要使用"本文""文章""综上所述"等表达
+【写作要求 — 口语化硬约束】
+1. 像在跟朋友聊天：短句为主，单句尽量 ≤ 25 字；忌长句堆砌
+2. 开头禁用："大家好""今天我们来聊聊""接下来""在当今社会"
+   ✅ 改用："老铁们""家人们""各位""说真的""讲真"
+3. 段落过渡用口语词："说回来""讲到这儿""对了""说白了"
+   ❌ 禁用："然而""因此""综上所述""首先/其次/最后"
+4. 禁用书面词："本文""文章""论述""阐明""深刻"
+5. 结尾强引导：抛一个让观众忍不住评论的问题 / 抖个争议点 / 留个悬念
+   ❌ 禁用："记得点赞关注""下期更精彩""我们下期再见"
+6. 禁止使用"#"符号
+7. 格式工整：标题 + 钩子 + 正文清晰分段
 
 【输出格式】
 标题：xxx

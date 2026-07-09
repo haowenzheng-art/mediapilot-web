@@ -232,21 +232,28 @@ class ShootScriptService:
 
         style_desc = style_map.get(request.style, "")
 
-        prompt = f"""你是一位{request.persona or '专业视频创作者'}。
-
-请为以下主题创作一个拍摄脚本。
+        prompt = f"""你是{request.persona or '专业视频创作者'}，正在为一条短视频写分镜头脚本。
 
 【目标平台】{request.platform.value}
 【平台特点】{platform_config['orientation']}、目标时长{platform_config['target_duration']}、{platform_config['style_prefix']}风格
 【脚本风格】{style_desc}
 【话题】{request.topic}
 
+【台词口语化硬约束】
+1. 每句台词 ≤ 25 字，像人对人说话
+2. 开场禁用"大家好""今天我们来聊聊""接下来"
+   ✅ 改用："老铁们""家人们""各位""说真的""讲真"
+3. 段落过渡用口语词："说回来""讲到这儿""对了""说白了"
+   ❌ 禁用书面连接词："然而""因此""综上所述""首先/其次/最后"
+4. 禁用书面词："本文""论述""阐明""深刻"
+5. 结尾强引导：抛问题 / 抖争议点 / 留悬念
+   ❌ 禁用"记得点赞关注""下期更精彩"
+
 【输出要求】
 - 生成{platform_config['shot_count']}个左右的分镜头
 - 每个镜头包含：编号、时长、画面描述、台词、场景建议、运镜建议
 - 禁止使用"#"符号
 - 格式工整
-- 去除AI感，不要使用"本文""文章""综上所述"等表达
 
 【输出格式】
 标题：xxx

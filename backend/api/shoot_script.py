@@ -79,9 +79,9 @@ async def generate_shoot_script(
                 content_id=result.id,
                 title=result.title,
                 summary=result.topic,
-                hot_topic_id=None,  # 脚本生成暂不关联热点
-                hot_topic_title=None,
-                hot_topic_source=None,
+                hot_topic_id=request.hot_topic_id,  # C1: 真实传入热点关联（v2 开启）
+                hot_topic_title=request.hot_topic_title,
+                hot_topic_source=request.hot_topic_source,
                 mode=None,
                 persona=request.persona,
                 platform=result.platform.value,

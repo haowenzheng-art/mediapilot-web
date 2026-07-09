@@ -6,7 +6,7 @@
  * - 处理滚动动画和页面导航
  * - 整合 Hero 页面和内容页面
  */
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { AnimatePresence } from 'framer-motion'
 
 import HeroSection from './pages/HeroSection'
@@ -16,6 +16,7 @@ import AIChat from './components/ai/AIChat'
 
 import TABS, { ROUTE_PATHS } from './routes'
 import { getCurrentUser, logout } from './services/auth'
+import { useHotTopic } from './contexts/HotTopicContext.jsx'
 
 const DEFAULT_TAB = ROUTE_PATHS.SHOOT_SCRIPT
 
@@ -24,11 +25,27 @@ function App() {
   const [isHeroPage, setIsHeroPage] = useState(true)
   const [currentUser, setCurrentUser] = useState(() => getCurrentUser())
   const [showLoginModal, setShowLoginModal] = useState(false)
+  const { setActiveHotTopic } = useHotTopic()
 
   const handleFeatureClick = (tabId) => {
     setActiveTab(tabId)
     setIsHeroPage(false)
   }
+
+  // C1: 监听跨页面跳转事件（带 hot topic 数据）—— 热点卡点"去生成文案/脚本"触发
+  useEffect(() => {
+    const handler = (e) => {
+      const { tab, hotTopic } = e.detail || {}
+      if (!tab) return
+      if (hotTopic) {
+        setActiveHotTopic(hotTopic)
+      }
+      setActiveTab(tab)
+      setIsHeroPage(false)
+    }
+    window.addEventListener('tab-change-with-data', handler)
+    return () => window.removeEventListener('tab-change-with-data', handler)
+  }, [setActiveHotTopic])
 
   const scrollToHero = () => {
     setIsHeroPage(true)

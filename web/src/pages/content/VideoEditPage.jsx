@@ -9,14 +9,74 @@ function formatTime(sec) {
   return `${m}:${s.toString().padStart(2, '0')}`
 }
 
+function SegmentList({ title, segments, state, onToggle, accent }) {
+  // 通用列表组件：kept / removed 两态通用
+  // segments: 数组（kept: [[s,e]...], removed: [{start, end, text, reason}...]）
+  if (!segments || segments.length === 0) {
+    return null
+  }
+  return (
+    <div style={{ marginBottom: '16px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+        <p style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-secondary)', margin: 0 }}>
+          {title}（{segments.length}）
+        </p>
+      </div>
+      <div style={{ padding: '12px 16px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', maxHeight: '240px', overflow: 'auto' }}>
+        {segments.map((seg, idx) => {
+          const start = Array.isArray(seg) ? seg[0] : seg.start
+          const end = Array.isArray(seg) ? seg[1] : seg.end
+          const text = Array.isArray(seg) ? '' : (seg.text || '')
+          const reason = Array.isArray(seg) ? '' : (seg.reason || '')
+          const toggleLabel = state === 'kept' ? '🗑️ 删除' : '✓ 恢复'
+          const toggleColor = state === 'kept' ? 'var(--error)' : 'var(--success)'
+          return (
+            <div key={idx} style={{ padding: '8px 0', borderBottom: idx < segments.length - 1 ? '1px solid var(--border-color)' : 'none', fontSize: '13px' }}>
+              <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
+                <span style={{ color: 'var(--text-tertiary)', fontFamily: 'monospace', flexShrink: 0, fontSize: '12px' }}>
+                  {formatTime(start)} → {formatTime(end)}
+                </span>
+                <span style={{ color: 'var(--text-primary)', flex: 1 }}>
+                  {text || reason || <span style={{ color: 'var(--text-tertiary)' }}>（无文字）</span>}
+                </span>
+                <button
+                  onClick={() => onToggle(idx, state)}
+                  style={{
+                    padding: '4px 10px',
+                    fontSize: '11px',
+                    color: toggleColor,
+                    background: 'transparent',
+                    border: `1px solid ${toggleColor}`,
+                    borderRadius: 'var(--radius-sm)',
+                    cursor: 'pointer',
+                    flexShrink: 0,
+                  }}
+                >
+                  {toggleLabel}
+                </button>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 function VideoEditPage() {
   const {
     videoFile, fileInputRef, handleFileChange, handleDrop,
     taskId, status, progress, result, error,
     strength, setStrength,
     startEdit, clearAll, downloadVideo, downloadSubtitle,
+    // B1: 历史任务
+    history, historyLoading, loadHistory, viewHistoryTask,
+    // B3: 微调 segments
+    segmentsState, toggleSegment, isDirty, reapplySegments, reapplying, resetSegments,
   } = useVideoEdit()
 
+  // B1: 历史任务区展开/折叠
+  const [historyOpen, setHistoryOpen] = useState(false)
   const isProcessing = status === 'uploading' || status === 'processing'
   const hasResult = status === 'completed' && result
 
@@ -176,26 +236,93 @@ function VideoEditPage() {
                 />
               )}
 
-              {/* 删除片段列表 */}
-              {result.removed_segments && result.removed_segments.length > 0 && (
-                <div>
-                  <p style={{ fontSize: '13px', fontWeight: '500', marginBottom: '8px', color: 'var(--text-secondary)' }}>
-                    🗑️ 删除的无效片段
-                  </p>
-                  <div style={{ padding: '12px 16px', border: '1px solid var(--border-color)', borderRadius: 'var(--radius-md)', background: 'var(--bg-secondary)', maxHeight: '240px', overflow: 'auto' }}>
-                    {result.removed_segments.map((seg, idx) => (
-                      <div key={idx} style={{ padding: '8px 0', borderBottom: idx < result.removed_segments.length - 1 ? '1px solid var(--border-color)' : 'none', fontSize: '13px' }}>
-                        <div style={{ display: 'flex', gap: '12px', alignItems: 'flex-start' }}>
-                          <span style={{ color: 'var(--text-tertiary)', fontFamily: 'monospace', flexShrink: 0, fontSize: '12px' }}>
-                            {formatTime(seg.start)} → {formatTime(seg.end)}
-                          </span>
-                          <span style={{ color: 'var(--text-primary)', flex: 1 }}>{seg.text || '（无文字）'}</span>
-                        </div>
-                      </div>
-                    ))}
+              {/* B3: 分段精细调整面板 */}
+              <div style={{
+                padding: '16px',
+                background: 'linear-gradient(135deg, rgba(99,102,241,0.05) 0%, rgba(99,102,241,0.02) 100%)',
+                border: '1px solid rgba(99,102,241,0.2)',
+                borderRadius: 'var(--radius-md)',
+              }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                  <div>
+                    <p style={{ fontSize: '14px', fontWeight: '600', margin: 0, color: 'var(--text-primary)' }}>
+                      🎯 分段精细调整
+                    </p>
+                    <p style={{ fontSize: '11px', color: 'var(--text-tertiary)', margin: '4px 0 0' }}>
+                      点击「删除」或「恢复」切换片段状态，然后应用修改重新生成
+                    </p>
+                  </div>
+                  <div style={{ display: 'flex', gap: '8px' }}>
+                    {isDirty() && (
+                      <button
+                        onClick={resetSegments}
+                        disabled={reapplying}
+                        style={{
+                          padding: '6px 14px',
+                          fontSize: '12px',
+                          background: 'transparent',
+                          color: 'var(--text-secondary)',
+                          border: '1px solid var(--border-color)',
+                          borderRadius: 'var(--radius-sm)',
+                          cursor: reapplying ? 'not-allowed' : 'pointer',
+                        }}
+                      >
+                        ↺ 撤销修改
+                      </button>
+                    )}
+                    <button
+                      onClick={reapplySegments}
+                      disabled={!isDirty() || reapplying}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        background: isDirty() && !reapplying ? 'var(--primary)' : 'var(--text-tertiary)',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: isDirty() && !reapplying ? 'pointer' : 'not-allowed',
+                        opacity: isDirty() && !reapplying ? 1 : 0.6,
+                      }}
+                    >
+                      {reapplying ? '⏳ 重新生成中…' : isDirty() ? '✓ 应用修改并重新生成' : '✓ 已应用'}
+                    </button>
                   </div>
                 </div>
-              )}
+
+                {/* 保留片段列表（B3 可切换） */}
+                <SegmentList
+                  title="✓ 保留片段"
+                  segments={segmentsState.kept}
+                  state="kept"
+                  onToggle={toggleSegment}
+                  accent="var(--success)"
+                />
+
+                {/* 删除片段列表（B3 可切换） */}
+                <SegmentList
+                  title="🗑️ 删除片段"
+                  segments={segmentsState.removed}
+                  state="removed"
+                  onToggle={toggleSegment}
+                  accent="var(--error)"
+                />
+
+                {isDirty() && (
+                  <div style={{
+                    marginTop: '8px',
+                    padding: '8px 12px',
+                    background: 'rgba(245, 158, 11, 0.1)',
+                    border: '1px solid rgba(245, 158, 11, 0.3)',
+                    borderRadius: 'var(--radius-sm)',
+                    fontSize: '12px',
+                    color: '#b45309',
+                  }}>
+                    ⚠️ 您有 {segmentsState.kept.length} 个保留片段 / {segmentsState.removed.length} 个删除片段。
+                    点击「应用修改」后会重新生成视频、字幕和预览（约 30 秒）。
+                  </div>
+                )}
+              </div>
 
               {/* 干净转写文本 */}
               {result.transcript && (
@@ -227,7 +354,102 @@ function VideoEditPage() {
         </div>
       </div>
     </div>
-  )
+
+      {/* B1: 历史任务区 (折叠) */}
+      <div style={{ maxWidth: '1200px', margin: '32px auto 0', padding: '0 24px', width: '100%' }}>
+        <button
+          onClick={() => {
+            const next = !historyOpen
+            setHistoryOpen(next)
+            if (next && history.length === 0) {
+              loadHistory()
+            }
+          }}
+          style={{
+            width: '100%',
+            padding: '12px 20px',
+            background: 'var(--bg-secondary)',
+            border: '1px solid var(--border-color)',
+            borderRadius: 'var(--radius-md)',
+            color: 'var(--text-primary)',
+            fontSize: '14px',
+            fontWeight: '500',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            transition: 'all 0.15s ease',
+          }}
+        >
+          <span>📜 我的剪辑历史 {history.length > 0 && `(${history.length})`}</span>
+          <span style={{ color: 'var(--text-tertiary)' }}>{historyOpen ? '▲' : '▼'}</span>
+        </button>
+
+        {historyOpen && (
+          <div style={{ marginTop: '12px', padding: '16px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+            {historyLoading ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                加载中...
+              </div>
+            ) : history.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '20px', color: 'var(--text-tertiary)', fontSize: '13px' }}>
+                暂无历史任务
+              </div>
+            ) : (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {history.map((t) => {
+                  const isActive = t.task_id === taskId
+                  const statusColor = t.status === 'completed' ? 'var(--success)'
+                    : t.status === 'failed' ? 'var(--error)'
+                    : 'var(--warning)'
+                  return (
+                    <div
+                      key={t.task_id}
+                      onClick={() => viewHistoryTask(t.task_id)}
+                      style={{
+                        padding: '12px 16px',
+                        background: isActive ? 'var(--primary)15' : 'var(--bg-primary)',
+                        border: isActive ? '2px solid var(--primary)' : '1px solid var(--border-color)',
+                        borderRadius: 'var(--radius-sm)',
+                        cursor: 'pointer',
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseEnter={(e) => { e.currentTarget.style.background = isActive ? 'var(--primary)20' : 'var(--bg-tertiary)' }}
+                      onMouseLeave={(e) => { e.currentTarget.style.background = isActive ? 'var(--primary)15' : 'var(--bg-primary)' }}
+                    >
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-primary)', marginBottom: '4px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {t.source_video_name || t.task_id}
+                        </div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', display: 'flex', gap: '12px' }}>
+                          <span style={{ color: statusColor }}>● {t.status}</span>
+                          {t.original_duration != null && t.final_duration != null && (
+                            <span>{Math.floor(t.original_duration)}s → {Math.floor(t.final_duration)}s</span>
+                          )}
+                          {t.strength && <span>强度: {t.strength}</span>}
+                          {t.hot_topic_title && (
+                            <span style={{ color: '#ff6b6b' }} title={t.hot_topic_title}>
+                              🔥 {t.hot_topic_title.length > 20 ? t.hot_topic_title.slice(0, 20) + '...' : t.hot_topic_title}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-tertiary)', flexShrink: 0, marginLeft: '12px' }}>
+                        {t.created_at ? new Date(t.created_at).toLocaleString('zh-CN', { month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' }) : ''}
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+    )
 }
 
 export default VideoEditPage

@@ -10,9 +10,15 @@ export const shootScriptService = {
   /**
    * 生成拍摄脚本（阻塞）
    */
-  async generate(topic, platform, style, persona, duration_seconds) {
+  async generate(topic, platform, style, persona, duration_seconds, options = {}) {
     const body = { topic, platform, style, persona, enable_reasoning: true }
     if (duration_seconds) body.duration_seconds = duration_seconds
+    // C1: 携带热点关联（让内容库反查可拿到 hot_topic_id）
+    if (options.hotTopic) {
+      body.hot_topic_id = options.hotTopic.id
+      body.hot_topic_title = options.hotTopic.title
+      body.hot_topic_source = options.hotTopic.source
+    }
     return request('/api/v1/shoot-script/generate', {
       method: 'POST',
       body: JSON.stringify(body),
@@ -41,6 +47,12 @@ export const shootScriptService = {
       enable_reasoning: options.enableReasoning ?? true,
     }
     if (duration_seconds) body.duration_seconds = duration_seconds
+    // C1: 携带热点关联（让内容库反查可拿到 hot_topic_id）
+    if (options.hotTopic) {
+      body.hot_topic_id = options.hotTopic.id
+      body.hot_topic_title = options.hotTopic.title
+      body.hot_topic_source = options.hotTopic.source
+    }
 
     const response = await fetch(`${API_BASE_URL}/api/v1/shoot-script/generate/stream`, {
       method: 'POST',

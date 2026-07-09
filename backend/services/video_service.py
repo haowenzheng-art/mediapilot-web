@@ -11,7 +11,6 @@ from backend.models.schemas.response import (
     VideoTranscriptResponse,
     TranscriptLine,
 )
-from backend.services.mock_data import MockDataService
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +19,7 @@ class VideoService:
     """视频分析服务"""
 
     def __init__(self):
-        self.mock_data = MockDataService()
+        pass
 
     async def _fetch_bilibili_basic(self, video_url: str) -> dict | None:
         """从 B 站公开 API 获取基础信息（封面、标题），不依赖 yt-dlp"""
@@ -385,7 +384,11 @@ class VideoService:
             raise RuntimeError(f"无法解析视频信息: {e}{hint}")
 
     async def get_transcript(self, video_id: str) -> VideoTranscriptResponse:
-        """获取视频逐字稿（yt-dlp提取音频 + whisper转写，失败回退mock）"""
+        """获取视频逐字稿（yt-dlp提取音频 + whisper转写）
+
+        数据真实性原则：失败时直接 raise RuntimeError 上报，
+        不再回退"大家好今天给大家分享..."等假逐字稿（v4 D 任务清理）。
+        """
         audio_file = os.path.join(tempfile.gettempdir(), f"audio_{video_id}")
 
         try:
@@ -471,16 +474,11 @@ class VideoService:
             )
 
         except Exception as e:
-            logger.warning(f"视频转写失败，回退mock: {e}")
+            logger.warning(f"视频转写失败: {e}")
             # 清理临时文件
             for f in [audio_file, audio_file + ".mp3"]:
                 if os.path.exists(f):
                     os.remove(f)
                     logger.info(f"已清理临时文件: {f}")
-
-            transcript = self.mock_data.get_video_transcript(video_id)
-            return VideoTranscriptResponse(
-                video_id=video_id,
-                full_transcript=transcript["full_transcript"],
-                lines=[TranscriptLine(**l) for l in transcript["lines"]]
-            )
+            # 失败如实上报，不回退 mock 假数据
+            raise RuntimeError(f"视频转写失败: {e}") from e

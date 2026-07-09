@@ -4,7 +4,6 @@ MediaPilot Pydantic 模型
 """
 from .request import (
     TrendingSearchRequest,
-    CompetitorSearchRequest,
     VideoFetchRequest,
     VideoRewriteRequest,
     ContentGenerateRequest,
@@ -16,8 +15,6 @@ from .response import (
     Shot,
     Copywriting,
     HotTopicResponse,
-    CompetitorAccountResponse,
-    CompetitorSearchResponse,
     VideoInfo,
     VideoTranscriptResponse,
     MediaTranscribeResponse,
@@ -27,13 +24,11 @@ from .response import (
 
 __all__ = [
     'TrendingSearchRequest',
-    'CompetitorSearchRequest',
     'VideoFetchRequest',
     'VideoRewriteRequest',
     'ContentGenerateRequest',
     'APIResponse',
     'TrendingSearchResponse',
-    'CompetitorSearchResponse',
     'VideoInfo',
     'VideoTranscriptResponse',
     'TranscriptLine',

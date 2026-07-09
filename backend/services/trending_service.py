@@ -1,9 +1,9 @@
 """
 热点搜索业务逻辑
 
-v3 改造：
-- 接收 HotTopicSearchResult（含 degraded/sixty_failed 元信息）
-- 8/2 配额：degraded 模式下 baidu 拿 80% 预算
+v4 改造：
+- 接收 HotTopicSearchResult（含 degraded 元信息，sixty_failed 字段保留兼容但固定为空）
+- 简化为按源数平均配额
 - TrendingSearchResponse 透传 degraded_platforms / freshness / cached_at
 """
 import logging
@@ -11,20 +11,16 @@ import math
 from collections import defaultdict
 
 from backend.models.schemas.response import HotTopicResponse, TrendingSearchResponse
-from backend.services.mock_data import MockDataService
 from backend.core.platform_api import get_platform_api_manager, HotTopicSearchResult
 from backend.models.hot_topics import HotTopic, HotTopicSubscription, HotTopicPush
 
 logger = logging.getLogger(__name__)
-
-BAIDU_SOURCE_TAG = "百度新闻"
 
 
 class TrendingService:
     """热点搜索服务"""
 
     def __init__(self):
-        self.mock_data = MockDataService()
         self.platform_api = get_platform_api_manager().get_hot_topic_api()
 
     async def search(
@@ -77,53 +73,29 @@ class TrendingService:
             ]
 
         # 按平台动态配额：总预算 10 条
-        # 正常模式：按所选平台数平均分配，余数顺位补给排在前的平台
+        # 按所选平台数平均分配，余数顺位补给排在前的平台（按总热度降序）
         #   5 平台 → 2/2/2/2/2，3 平台 → 4/3/3，2 平台 → 5/5
-        # degraded 模式（v3 改造）：baidu 拿 80% 预算，其他源分享 20%
+        # 失败的源不进 grouped → 它的预算会被成功的源分摊（v4 精简：已无 60s 加重逻辑）
         TOTAL_BUDGET = 10
         grouped = defaultdict(list)
         for t in topics:
             source = t.get("source", "未知")
             grouped[source].append(t)
 
-        is_degraded_mode = (
-            search_result.freshness == "degraded"
-            and len(search_result.sixty_failed_platforms) >= 2
+        n_sources = max(len(grouped), 1)
+        base = TOTAL_BUDGET // n_sources
+        remainder = TOTAL_BUDGET - base * n_sources
+        sources_sorted = sorted(
+            grouped.keys(),
+            key=lambda s: sum(x.get("heat_value", 0) for x in grouped[s]),
+            reverse=True,
         )
-
-        if is_degraded_mode and BAIDU_SOURCE_TAG in grouped:
-            # 8/2 配额：baidu 80%，其他 20%
-            baidu_items = grouped[BAIDU_SOURCE_TAG]
-            baidu_items.sort(key=lambda x: x.get("heat_value", 0), reverse=True)
-            baidu_quota = int(TOTAL_BUDGET * 0.8)  # 8
-            other_quota = TOTAL_BUDGET - baidu_quota  # 2
-            quota_topics = list(baidu_items[:baidu_quota])
-            other_topics = []
-            for src, items in grouped.items():
-                if src == BAIDU_SOURCE_TAG:
-                    continue
-                items.sort(key=lambda x: x.get("heat_value", 0), reverse=True)
-                other_topics.extend(items)
-            other_topics.sort(key=lambda x: x.get("heat_value", 0), reverse=True)
-            quota_topics.extend(other_topics[:other_quota])
-            logger.info(
-                f"degraded 模式启用 8/2 配额：baidu={baidu_quota} 其他={other_quota}"
-            )
-        else:
-            n_sources = max(len(grouped), 1)
-            base = TOTAL_BUDGET // n_sources
-            remainder = TOTAL_BUDGET - base * n_sources
-            sources_sorted = sorted(
-                grouped.keys(),
-                key=lambda s: sum(x.get("heat_value", 0) for x in grouped[s]),
-                reverse=True
-            )
-            quota_topics = []
-            for i, source in enumerate(sources_sorted):
-                items = grouped[source]
-                items.sort(key=lambda x: x.get("heat_value", 0), reverse=True)
-                quota = base + (1 if i < remainder else 0)
-                quota_topics.extend(items[:quota])
+        quota_topics = []
+        for i, source in enumerate(sources_sorted):
+            items = grouped[source]
+            items.sort(key=lambda x: x.get("heat_value", 0), reverse=True)
+            quota = base + (1 if i < remainder else 0)
+            quota_topics.extend(items[:quota])
 
         topics = quota_topics
 
@@ -151,6 +123,7 @@ class TrendingService:
             cached_at=cached_at_dt,
             freshness=search_result.freshness,
         )
+
 
     async def create_subscription(
         self,

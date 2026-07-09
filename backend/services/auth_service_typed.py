@@ -22,13 +22,13 @@ QUOTA_COSTS: Dict[str, int] = {
     "rewrite_transcript": 5,
     "generate_outline": 3,
     "search_trending": 2,
-    "search_competitors": 2,
     "transcribe_audio": 10,
     "transcribe_video": 10,
     "generate_copywriting": 5,
     "rewrite_copywriting": 3,
     "generate_shoot_script": 8,
     "create_subscription": 1,
+    "video_edit": 15,  # 视频剪辑（转写 10 + LLM 5）
 }
 
 DEFAULT_QUOTA: int = 100

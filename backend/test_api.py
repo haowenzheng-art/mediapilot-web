@@ -44,31 +44,6 @@ def test_login():
     except Exception as e:
         return TestResult("登录", False, str(e))
 
-def test_competitor_search(token: str):
-    """测试对标账号搜索"""
-    try:
-        resp = requests.post(
-            f"{BASE_URL}/competitors/search",
-            headers={"Authorization": f"Bearer {token}"},
-            json={
-                "niche": "tech",
-                "platforms": ["douyin"],
-                "min_followers": 10000,
-                "max_followers": 1000000,
-                "min_avg_likes": 100
-            },
-            timeout=10
-        )
-        if resp.status_code == 200:
-            data = resp.json()
-            if data.get("success"):
-                result = data.get("data", {})
-                competitors = result.get("competitors", [])
-                return TestResult("对标搜索", True, f"找到 {len(competitors)} 个对标账号")
-        return TestResult("对标搜索", False, str(resp.status_code))
-    except Exception as e:
-        return TestResult("对标搜索", False, str(e))
-
 def test_trending_search(token: str):
     """测试热点搜索"""
     try:
@@ -77,7 +52,7 @@ def test_trending_search(token: str):
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "keyword": "AI",
-                "platforms": ["douyin"],
+                "platforms": ["baidu", "toutiao"],  # v4 精简
                 "days": 7
             },
             timeout=10
@@ -120,15 +95,11 @@ def run_all_tests():
     trending = test_trending_search(token)
     print(trending)
 
-    # 测试 4: 对标账号搜索
-    competitors = test_competitor_search(token)
-    print(competitors)
-
     # 汇总
-    all_passed = all([t.passed for t in [health, login, trending, competitors]])
+    all_passed = all([t.passed for t in [health, login, trending]])
     print(f"\n=== 测试结果 ===")
-    print(f"通过: {sum([t.passed for t in [health, login, trending, competitors])}/4")
-    print(f"总数: 4")
+    print(f"通过: {sum([t.passed for t in [health, login, trending]])}/3")
+    print(f"总数: 3")
 
 if __name__ == "__main__":
     run_all_tests()

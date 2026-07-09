@@ -74,21 +74,18 @@ class MediaProcessor:
             return None
 
     def transcribe_audio(self, audio_path: str, **kwargs) -> Dict[str, Any]:
-        """语音转文字（同步版本）"""
-        if self.transcribe_engine and self.transcribe_engine.is_available():
-            try:
-                return self.transcribe_engine.transcribe(audio_path, **kwargs)
-            except Exception as e:
-                logger.warning(f"Transcribe engine failed, falling back to mock: {e}")
+        """语音转文字（同步版本）
 
-        logger.info("Using mock transcribe result")
-        return {
-            "transcript": "这是模拟的语音转文字结果...",
-            "timestamps": [
-                {"time": "00:00", "text": "大家好"},
-                {"time": "00:05", "text": "今天我们来聊一聊"}
-            ]
-        }
+        数据真实性原则：transcribe_engine 不可用时直接抛 RuntimeError，
+        不隐式回退 mock 假数据（会污染下游 ffmpeg 剪切 + 字幕）。
+        Mock 路径请显式使用 MockMediaProcessor（通过 settings.USE_MOCK_TRANSCRIBE 切换）。
+        """
+        if not self.transcribe_engine or not self.transcribe_engine.is_available:
+            raise RuntimeError(
+                "转写引擎不可用：未配置 Whisper 或火山引擎。请检查环境变量 "
+                "(USE_WHISPER_LOCAL / VOLCENGINE_ASR_KEY) 或启用 USE_MOCK_TRANSCRIBE 走 mock 测试路径"
+            )
+        return self.transcribe_engine.transcribe(audio_path, **kwargs)
 
     async def transcribe_audio_async(self, audio_path: str, **kwargs) -> Dict[str, Any]:
         """语音转文字（异步版本，避免阻塞事件循环）"""

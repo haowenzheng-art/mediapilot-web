@@ -5,6 +5,7 @@ import './index.css'
 import './styles/notion.css'
 import App from './App.jsx'
 import { AppProvider } from './contexts/AppContext.jsx'
+import { HotTopicProvider } from './contexts/HotTopicContext.jsx'
 
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -42,7 +43,9 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     <ErrorBoundary>
       <AppProvider>
-        <App />
+        <HotTopicProvider>
+          <App />
+        </HotTopicProvider>
       </AppProvider>
     </ErrorBoundary>
   </StrictMode>,

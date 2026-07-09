@@ -2,7 +2,6 @@ import { createContext, useContext, useState, useEffect } from 'react'
 
 const HISTORY_TYPES = {
   HOT_SEARCH: 'hot_search',
-  COMPETITORS: 'competitors',
   SCRIPT: 'script',
   PLATFORM_DATA: 'platform_data'
 }

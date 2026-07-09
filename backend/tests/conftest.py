@@ -98,3 +98,135 @@ def extract_error(resp):
     body = resp.json()
     assert not body.get("success", True), f"期望失败但成功: {body}"
     return body["error"]
+
+# 固定 AI 总结 mock 返回值：符合 v2 prompt 约定的 5 段【】结构
+MOCK_AI_SUMMARY_OUTPUT = (
+    "【背景】这是 AI 生成的背景段落，用于测试。\n\n"
+    "【核心事实】事实 1：测试。事实 2：测试。\n\n"
+    "【影响】影响 1：测试。\n\n"
+    "【观点】观点 1：测试。\n\n"
+    "【延伸】延伸话题 1：测试。"
+)
+
+
+@pytest.fixture
+def mock_ai_summary(monkeypatch):
+    """Mock ai_manager 用于 /trending/summary 端点测试。
+
+    - is_available() -> True
+    - generate() -> 固定 5 段【】结构字符串
+
+    让 summary 测试不再依赖真实 AI（在 CI / 无 API key 环境也稳定）。
+    """
+    from backend.api import trending as _trending_mod
+
+    async def fake_generate(prompt, **kwargs):
+        return MOCK_AI_SUMMARY_OUTPUT
+
+    monkeypatch.setattr(_trending_mod.ai_manager, "generate", fake_generate)
+    monkeypatch.setattr(_trending_mod.ai_manager, "is_available", lambda: True)
+    return MOCK_AI_SUMMARY_OUTPUT
+
+
+@pytest.fixture
+def mock_ai_summary_unavailable(monkeypatch):
+    """Mock ai_manager.is_available() -> False，测 AI 不可用 → 503 路径。"""
+    from backend.api import trending as _trending_mod
+
+    async def fake_generate(prompt, **kwargs):
+        return ""  # 不可达
+
+    monkeypatch.setattr(_trending_mod.ai_manager, "generate", fake_generate)
+    monkeypatch.setattr(_trending_mod.ai_manager, "is_available", lambda: False)
+    return None
+
+
+@pytest.fixture
+def mock_ai_summary_empty_response(monkeypatch):
+    """Mock ai_manager.generate() -> ""，测 AI 返回空 → 503 路径。"""
+    from backend.api import trending as _trending_mod
+
+    async def fake_generate(prompt, **kwargs):
+        return ""
+
+    monkeypatch.setattr(_trending_mod.ai_manager, "generate", fake_generate)
+    monkeypatch.setattr(_trending_mod.ai_manager, "is_available", lambda: True)
+    return None
+
+
+# ========== C1 mock fixtures for copywriting / shoot_script e2e ==========
+
+MOCK_AI_COPYWRITING_OUTPUT = {
+    "id": "cpy_test_001",
+    "title": "测试口播文案标题",
+    "hooks": ["钩子 1", "钩子 2", "钩子 3"],
+    "content": "这是测试用的口播文案内容。",
+    "mode": "from_zero",
+    "created_at": "2026-07-09T00:00:00",
+}
+
+
+@pytest.fixture
+def mock_ai_copywriting(monkeypatch):
+    """Mock copywriting_service.generate — 让 e2e 不依赖真实 AI。
+
+    注意：patch 路径是 backend.api.copywriting.copywriting_service（API 模块 import 的实例），
+    不是 backend.services.copywriting_service.copywriting_service（service 模块的实例）。
+    """
+    from backend.api import copywriting as _cpy_api
+    from backend.models.domain.persona import CopywritingResponse
+
+    async def fake_cpy_generate(request, db, user_id):
+        return CopywritingResponse(
+            id="cpy_test_001",
+            title="测试口播文案",
+            hooks=["钩子 1", "钩子 2"],
+            content="这是测试文案内容。",
+            mode=request.mode,
+            persona=request.persona,  # 修复：CopywritingResponse 需要 persona 字段
+            created_at="2026-07-09T00:00:00",
+        )
+
+    monkeypatch.setattr(_cpy_api.copywriting_service, "generate", fake_cpy_generate)
+    return MOCK_AI_COPYWRITING_OUTPUT
+
+
+@pytest.fixture
+def mock_ai_shoot_script(monkeypatch):
+    """Mock shoot_script_service.generate — 让 e2e 不依赖真实 AI。
+
+    修复：patch 路径是 backend.api.shoot_script.shoot_script_service（API 模块 import 的实例），
+    estimated_duration 是 string 不是 int。
+    """
+    from backend.api import shoot_script as _shoot_api
+    from backend.models.domain.shoot_script import (
+        ShootScriptResponse, PlatformType, ScriptStyle, Shot,
+    )
+
+    async def fake_shoot_generate(request):
+        return ShootScriptResponse(
+            id="shoot_test_001",
+            title="测试脚本标题",
+            topic=request.topic,
+            platform=PlatformType.DOUYIN,
+            style=request.style,
+            persona=request.persona or "测试人设",  # ShootScriptResponse 需要 persona
+            estimated_duration="0:00-1:00",  # 修复：必须是 string
+            hooks=["钩子 1", "钩子 2"],
+            shots=[
+                Shot(
+                    shot_number=1,
+                    duration="0:00-0:08",
+                    visual_description="画面描述",
+                    dialogue="台词",
+                    scene_suggestion="场景",
+                    camera_movement="运镜",
+                )
+            ],
+            call_to_action="行动号召",
+            tags=["#测试"],
+            created_at="2026-07-09T00:00:00",
+        )
+
+    monkeypatch.setattr(_shoot_api.shoot_script_service, "generate", fake_shoot_generate)
+    return None

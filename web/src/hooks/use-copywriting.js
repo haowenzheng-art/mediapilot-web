@@ -33,6 +33,8 @@ export function useCopywriting() {
   const [persona, setPersona] = useState('')
   const [personas, setPersonas] = useState([])
   const [topic, setTopic] = useState('')
+  // C1: 跨页面跳转携带的热点元数据（来自 HotTopicContext）
+  const [hotTopic, setHotTopic] = useState(null)
   const [hotspotContent, setHotspotContent] = useState('')
   const [originalText, setOriginalText] = useState('')
   const [result, setResult] = useState(null)
@@ -107,6 +109,13 @@ export function useCopywriting() {
       params.original_text = originalText
     }
 
+    // C1: 携带热点关联（让内容库反查可拿到 hot_topic_id）
+    if (hotTopic) {
+      params.hot_topic_id = hotTopic.id
+      params.hot_topic_title = hotTopic.title
+      params.hot_topic_source = hotTopic.source
+    }
+
     setLoading(true)
     setError(null)
     setResult(null)
@@ -122,7 +131,7 @@ export function useCopywriting() {
     } finally {
       setLoading(false)
     }
-  }, [mode, persona, topic, hotspotContent, originalText, runStream, enableReasoning, resetStream])
+  }, [mode, persona, topic, hotspotContent, originalText, hotTopic, runStream, enableReasoning, resetStream])
 
   // 流式完成（meta.final=true）后从 meta.parsed 写入 result state
   // 用 useEffect 监听 meta 变化
@@ -215,6 +224,7 @@ ${result.content}`
     topic, setTopic,
     hotspotContent, setHotspotContent,
     originalText, setOriginalText,
+    hotTopic, setHotTopic,  // C1
     result, setResult,
     loading, error, setError,
     // 流式相关

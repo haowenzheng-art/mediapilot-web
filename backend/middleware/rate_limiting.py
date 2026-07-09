@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 RATE_LIMITS = {
     "api_v1_trending_search": {"calls": 30, "period": 60},
     "api_v1_trending_export": {"calls": 10, "period": 3600},
-    "api_v1_competitors_search": {"calls": 20, "period": 3600},
     "api_v1_content_generate": {"calls": 5, "period": 60},
     "api_v1_video_transcribe": {"calls": 10, "period": 60},
     "api_v1_agent_run": {"calls": 10, "period": 60},

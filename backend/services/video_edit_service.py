@@ -26,9 +26,13 @@ from backend.core.transcribe_engine import TranscribeEngineManager
 from backend.models.schemas.response import (
     VideoEditResponse,
     VideoEditSegment,
+    VideoEditReapplyRequest,
 )
 from backend.repository.video_edit_repo import VideoEditRepository
 from backend.config.database import SessionLocal
+from backend.models.domain.content_library import ContentCreate
+from backend.models.domain.content import ContentType
+from backend.models.database.tables import VideoEditTaskTable
 
 logger = logging.getLogger(__name__)
 
@@ -233,6 +237,41 @@ class VideoEditService:
             try:
                 await self._do_edit_pipeline(task_id, video_path, repo, user_id, cfg)
                 logger.info(f"视频剪辑任务完成: {task_id}")
+
+                # B2: 成功完成后自动入库到 content_library
+                # 从 edit_config 提取 hot_topic 元数据（如果有）
+                try:
+                    task_row = db.query(VideoEditTaskTable).filter(
+                        VideoEditTaskTable.task_id == task_id
+                    ).first()
+                    if task_row:
+                        edit_cfg = task_row.edit_config or {}
+                        from backend.services.content_library_service import content_library_service
+                        content_library_service.create_content(
+                            db,
+                            user_id=user_id,
+                            content_in=ContentCreate(
+                                content_type=ContentType.VIDEO_EDIT,
+                                content_id=task_id,
+                                title=task_row.source_video_name or task_id,
+                                summary=(
+                                    f"原始 {task_row.original_duration:.0f}s → 剪辑后 {task_row.final_duration:.0f}s"
+                                    if task_row.original_duration and task_row.final_duration
+                                    else f"视频剪辑 {task_id}"
+                                ),
+                                hot_topic_id=edit_cfg.get("hot_topic_id"),
+                                hot_topic_title=edit_cfg.get("hot_topic_title"),
+                                hot_topic_source=edit_cfg.get("hot_topic_source"),
+                                mode=None,
+                                persona=None,
+                                platform=None,
+                                style=(edit_cfg.get("strength") or "").lower() or None,
+                            )
+                        )
+                        logger.info(f"视频剪辑入库 content_library 成功: {task_id}")
+                except Exception as e:
+                    # 入库失败不影响主流程（与 copywriting / shoot_script 一致）
+                    logger.warning(f"视频剪辑入库 content_library 失败: {e}")
             except Exception as e:
                 logger.error(f"视频剪辑任务失败 {task_id}: {e}", exc_info=True)
                 repo.update_status(task_id, "failed", error=str(e)[:1000])
@@ -1279,23 +1318,21 @@ class VideoEditService:
     def _transcribe_with_words(self, audio_path: str) -> Dict[str, Any]:
         """
         使用 Whisper 转写音频，返回带逐字时间戳的结果。
-        优先用 transcribe_engine（Whisper），否则用 media_processor 的 mock。
-        """
-        if self.transcribe_engine and self.transcribe_engine.is_available:
-            try:
-                return self.transcribe_engine.transcribe(
-                    audio_path,
-                    word_timestamps=True,
-                    model=self.transcribe_engine.model_name,
-                    language=self.transcribe_engine.language,
-                )
-            except Exception as e:
-                logger.warning(f"TranscribeEngine 转写失败，降级到 media_processor: {e}")
 
-        # 降级：走 media_processor（MockMediaProcessor）
-        return self.media_processor.transcribe_audio(
+        数据真实性原则：transcribe_engine 不可用时直接抛 RuntimeError，
+        不再降级到 media_processor 的 mock（假逐字稿 + 假时间戳会让下游
+        ffmpeg 剪切 + 字幕生成出现错位）。
+        """
+        if not self.transcribe_engine or not self.transcribe_engine.is_available:
+            raise RuntimeError(
+                "转写引擎不可用：AI 剪辑必须依赖真实逐字稿 + 时间戳，"
+                "mock 数据会导致剪切错位。请检查 Whisper / 火山引擎配置。"
+            )
+        return self.transcribe_engine.transcribe(
             audio_path,
             word_timestamps=True,
+            model=self.transcribe_engine.model_name,
+            language=self.transcribe_engine.language,
         )
 
     def task_exists(self, task_id: str) -> bool:
@@ -1306,6 +1343,210 @@ class VideoEditService:
         if task and task.user_id == user_id:
             return task
         return None
+
+    # ==================== B3: 用户微调 segments 重新生成 ====================
+
+    async def reapply_segments(
+        self,
+        task_id: str,
+        user_id: int,
+        request: VideoEditReapplyRequest,
+    ) -> Dict[str, Any]:
+        """
+        B3: 用户微调 kept_segments 后重新生成视频/字幕/预览。
+
+        流程：
+        1. 校验 task 所有权 + status == completed + kept_segments 合法性
+        2. 取 task.word_timestamps + task.source_video_path
+        3. 重新跑 ffmpeg cut + subtitle + preview
+        4. 推断新的 removed_segments（基于 kept_segments 反推）
+        5. update_status 更新 DB
+
+        不重新跑转写 + LLM（用户已经看过 AI 决策，现在是自己微调）。
+        不再扣配额（属于同一任务的微调，不是新任务）。
+        """
+        task = self.repo.get_by_task_id(task_id)
+        if not task:
+            raise ValueError(f"任务 {task_id} 不存在")
+        if task.user_id != user_id:
+            raise ValueError("无权访问该任务")
+        if task.status != "completed":
+            raise ValueError(f"任务未完成，当前状态: {task.status}，无法微调")
+
+        new_kept = self._validate_and_normalize_kept(
+            request.kept_segments,
+            original_duration=task.original_duration or 0.0,
+        )
+
+        source_video_path = task.source_video_path
+        if not source_video_path or not os.path.isfile(source_video_path):
+            raise ValueError("源视频文件已丢失，无法重新生成")
+
+        word_timestamps = task.word_timestamps or []
+        if not word_timestamps:
+            raise ValueError("任务缺少转写结果，无法重新生成字幕")
+
+        # ===== 重新生成视频 =====
+        output_filename = f"edited_{task_id}.mp4"
+        output_video_path = os.path.join(self.upload_dir, output_filename)
+        cut_ok = await asyncio.to_thread(
+            self._ffmpeg_cut_concat, source_video_path, new_kept, output_video_path
+        )
+        if not cut_ok:
+            raise RuntimeError("FFmpeg 剪切拼接失败")
+
+        # ===== 重新生成预览 =====
+        preview_dir = os.path.join(self.upload_dir, "preview")
+        os.makedirs(preview_dir, exist_ok=True)
+        preview_filename = f"preview_{task_id}.mp4"
+        preview_video_path = os.path.join(preview_dir, preview_filename)
+        preview_ok = await asyncio.to_thread(
+            self._ffmpeg_make_preview, output_video_path, preview_video_path
+        )
+        preview_size = None
+        if preview_ok:
+            try:
+                preview_size = os.path.getsize(preview_video_path)
+            except OSError:
+                pass
+        else:
+            logger.warning(f"Preview 生成失败: {task_id}，主任务仍 completed")
+            preview_video_path = task.preview_video_path  # 兜底：保留旧的 preview
+
+        # ===== 重新生成字幕 =====
+        subtitle_filename = f"subtitle_{task_id}.{self.subtitle_format}"
+        subtitle_path = os.path.join(self.upload_dir, subtitle_filename)
+        srt_ok = await asyncio.to_thread(
+            self._generate_subtitle,
+            word_timestamps, new_kept, subtitle_path, self.subtitle_format
+        )
+        if not srt_ok:
+            logger.warning(f"字幕生成失败: {task_id}")
+            subtitle_path = task.subtitle_path  # 兜底
+
+        # ===== 推断 removed_segments =====
+        removed_segments = self._infer_removed_segments(
+            new_kept,
+            original_duration=task.original_duration or 0.0,
+            original_removed=task.removed_segments or [],
+        )
+
+        final_duration = sum(end - start for start, end in new_kept)
+
+        # ===== 更新 DB =====
+        self.repo.update_status(
+            task_id,
+            "completed",
+            kept_segments=[[s, e] for s, e in new_kept],
+            removed_segments=removed_segments,
+            output_video_path=output_video_path,
+            preview_video_path=preview_video_path,
+            preview_size_bytes=preview_size,
+            subtitle_path=subtitle_path if srt_ok else task.subtitle_path,
+            subtitle_format=self.subtitle_format if srt_ok else task.subtitle_format,
+            final_duration=final_duration,
+        )
+
+        logger.info(
+            f"B3 reapply 完成: {task_id}, kept={len(new_kept)}, "
+            f"removed={len(removed_segments)}, final={final_duration:.1f}s"
+        )
+
+        return {
+            "task_id": task_id,
+            "kept_segments": [[s, e] for s, e in new_kept],
+            "removed_segments": removed_segments,
+            "final_duration": final_duration,
+            "status": "completed",
+        }
+
+    def _validate_and_normalize_kept(
+        self,
+        kept_segments: List[List[float]],
+        original_duration: float,
+    ) -> List[Tuple[float, float]]:
+        """校验用户传的 kept_segments：合法 → 排序 → 去重叠 → 转 tuple"""
+        if not kept_segments:
+            raise ValueError("kept_segments 不能为空")
+
+        normalized: List[Tuple[float, float]] = []
+        for i, seg in enumerate(kept_segments):
+            if not isinstance(seg, (list, tuple)) or len(seg) != 2:
+                raise ValueError(f"第 {i+1} 项格式错误，应为 [start, end]")
+            try:
+                start = float(seg[0])
+                end = float(seg[1])
+            except (TypeError, ValueError):
+                raise ValueError(f"第 {i+1} 项的 start/end 不是数字")
+            if start < 0 or end <= start:
+                raise ValueError(f"第 {i+1} 项无效：start={start}, end={end}（end 必须 > start >= 0）")
+            if original_duration > 0 and end > original_duration + 0.5:
+                raise ValueError(
+                    f"第 {i+1} 项 end={end} 超过原视频时长 {original_duration:.1f}s"
+                )
+            normalized.append((start, end))
+
+        # 按 start 排序 + 合并相邻/重叠
+        normalized.sort(key=lambda x: x[0])
+        merged: List[Tuple[float, float]] = [normalized[0]]
+        for s, e in normalized[1:]:
+            prev_s, prev_e = merged[-1]
+            if s <= prev_e + 0.05:  # 极近视为相邻
+                merged[-1] = (prev_s, max(prev_e, e))
+            else:
+                merged.append((s, e))
+
+        # 过滤太短的段
+        merged = [(s, e) for s, e in merged if e - s >= 0.1]
+        if not merged:
+            raise ValueError("所有 segment 都不足 0.1s，请保留更长的片段")
+
+        return merged
+
+    def _infer_removed_segments(
+        self,
+        new_kept: List[Tuple[float, float]],
+        original_duration: float,
+        original_removed: List[Dict[str, Any]],
+    ) -> List[Dict[str, Any]]:
+        """
+        根据新的 kept 反推 removed 区间。
+
+        逻辑：把 [0, original_duration] 中不在 kept 内的所有区间合并为 removed。
+        reason 字段：尽量复用原始 removed 的 reason（如还在区间内），否则标 "用户微调"。
+        """
+        if original_duration <= 0:
+            return []
+
+        # 构建 not-kept 区间列表
+        gaps: List[Tuple[float, float]] = []
+        cursor = 0.0
+        for s, e in new_kept:
+            if s > cursor:
+                gaps.append((cursor, s))
+            cursor = max(cursor, e)
+        if cursor < original_duration:
+            gaps.append((cursor, original_duration))
+
+        # 为每个 gap 匹配 reason
+        removed: List[Dict[str, Any]] = []
+        for g_start, g_end in gaps:
+            # 找落在 [g_start, g_end] 内的原始 removed（取首个匹配的 reason）
+            matched_reason: Optional[str] = None
+            for orig in original_removed:
+                o_start = orig.get("start", 0)
+                o_end = orig.get("end", 0)
+                if o_start >= g_start and o_end <= g_end + 0.05:
+                    matched_reason = orig.get("reason")
+                    break
+            removed.append({
+                "start": round(g_start, 3),
+                "end": round(g_end, 3),
+                "text": "",
+                "reason": matched_reason or "用户微调",
+            })
+
+        return removed
 
     def _build_response(self, task: Any) -> VideoEditResponse:
         kept = None

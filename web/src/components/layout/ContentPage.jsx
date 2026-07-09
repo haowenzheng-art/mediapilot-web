@@ -17,6 +17,7 @@ import ContentLibraryPage from '../../pages/content/ContentLibraryPage'
 import TopicHistoryPage from '../../pages/content/TopicHistoryPage'
 import TranscriptionPage from '../../pages/content/TranscriptionPage'
 import VideoAnalysisPage from '../../pages/content/VideoAnalysisPage'
+import VideoEditPage from '../../pages/content/VideoEditPage'
 
 export default function ContentPage({ tabs, activeTab, onTabChange, currentUser, onLoginClick, onLogout, onLogoClick }) {
   // 监听自定义标签页切换事件
@@ -45,6 +46,8 @@ export default function ContentPage({ tabs, activeTab, onTabChange, currentUser,
         return <TranscriptionPage />
       case 'video-analysis':
         return <VideoAnalysisPage />
+      case 'video-edit':
+        return <VideoEditPage />
       default:
         return (
           <div style={{

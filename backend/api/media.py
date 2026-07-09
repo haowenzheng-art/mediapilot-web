@@ -4,13 +4,15 @@
 import os
 import json
 from typing import Optional
-from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Form
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends, status, Form, Query
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from backend.services.media_service import MediaService
 from backend.services.video_edit_service import VideoEditService
 from backend.core.transcribe_engine import TranscribeEngineManager
+from backend.repository.video_edit_repo import VideoEditRepository
+from backend.models.schemas.response import VideoEditTaskSummary, VideoEditReapplyRequest
 from backend.config.settings import get_upload_dir, settings
 from backend.config.database import get_db
 from backend.api.dependencies import get_current_user
@@ -101,6 +103,44 @@ async def get_media_task(
 
 
 # ==================== 视频剪辑（AI 自动去除磕巴片段） ====================
+
+@router.get("/video-edit/tasks")
+async def list_video_edit_tasks(
+    skip: int = Query(0, ge=0, description="分页跳过"),
+    limit: int = Query(20, ge=1, le=100, description="分页大小"),
+    current_user: UserTable = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """B1: 列出当前用户的视频剪辑历史任务（按 created_at 倒序）"""
+    repo = VideoEditRepository(db)
+    tasks = repo.get_tasks_by_user(current_user.id, skip=skip, limit=limit)
+    items = []
+    for t in tasks:
+        items.append(VideoEditTaskSummary(
+            task_id=t.task_id,
+            status=t.status,
+            source_video_name=t.source_video_name,
+            # strength 存在 edit_config JSON 里（不单独占字段）
+            strength=(t.edit_config or {}).get("strength") if t.edit_config else None,
+            original_duration=t.original_duration,
+            final_duration=t.final_duration,
+            output_video_path=t.output_video_path,
+            preview_video_path=t.preview_video_path,
+            subtitle_path=t.subtitle_path,
+            subtitle_format=t.subtitle_format,
+            error=t.error,
+            created_at=t.created_at.isoformat() if t.created_at else None,
+            updated_at=t.updated_at.isoformat() if t.updated_at else None,
+            # C1: 关联的热点（从 edit_config 提取）
+            hot_topic_id=(t.edit_config or {}).get("hot_topic_id") if t.edit_config else None,
+            hot_topic_title=(t.edit_config or {}).get("hot_topic_title") if t.edit_config else None,
+            hot_topic_source=(t.edit_config or {}).get("hot_topic_source") if t.edit_config else None,
+        ))
+    return success_response(
+        data={"tasks": items, "total": len(items), "skip": skip, "limit": limit},
+        message="获取剪辑任务列表成功",
+    )
+
 
 @router.post("/video-edit/upload")
 async def upload_video_for_edit(
@@ -239,6 +279,54 @@ async def download_video_edit_file(
     return FileResponse(
         path=file_path, filename=filename, media_type=media_type
     )
+
+
+@router.post("/video-edit/{task_id}/reapply")
+async def reapply_video_edit_segments(
+    task_id: str,
+    request: VideoEditReapplyRequest,
+    video_edit_service: VideoEditService = Depends(get_video_edit_service),
+    current_user: UserTable = Depends(get_current_user),
+):
+    """B3: 用户微调 kept_segments 后重新生成视频/字幕/预览
+
+    Body: { "kept_segments": [[start, end], ...] }
+
+    不重新跑转写 + LLM，复用 task.word_timestamps，仅重跑 ffmpeg cut + subtitle。
+    不扣配额（属于同一任务的微调，不是新任务）。
+    """
+    task = video_edit_service.get_task_owned_by(task_id, current_user.id)
+    if not task:
+        return error_response(
+            code=ErrorCode.NOT_FOUND,
+            message="任务不存在或无权访问",
+            status_code=status.HTTP_404_NOT_FOUND
+        )
+    try:
+        result = await video_edit_service.reapply_segments(task_id, current_user.id, request)
+    except ValueError as e:
+        msg = str(e)
+        # 区分 "无权" → 403, "不存在" → 404, 其他 → 400
+        if "无权" in msg:
+            return error_response(
+                code=ErrorCode.FORBIDDEN, message=msg,
+                status_code=status.HTTP_403_FORBIDDEN
+            )
+        if "不存在" in msg:
+            return error_response(
+                code=ErrorCode.NOT_FOUND, message=msg,
+                status_code=status.HTTP_404_NOT_FOUND
+            )
+        return error_response(
+            code=ErrorCode.INVALID_INPUT, message=msg,
+            status_code=status.HTTP_400_BAD_REQUEST
+        )
+    except RuntimeError as e:
+        return error_response(
+            code=ErrorCode.INTERNAL_ERROR, message=str(e),
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+        )
+    return success_response(data=result, message="已应用微调并重新生成视频")
 
 
 @router.get("/video-edit/{task_id}/preview")

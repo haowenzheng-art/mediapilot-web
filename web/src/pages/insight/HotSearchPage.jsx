@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import { useHotSearch } from '../../hooks/use-hot-search'
 import PageContainer from '../../components/common/PageContainer'
+import { ROUTE_PATHS } from '../../routes/route_paths.js'
+import { useHotTopic } from '../../contexts/HotTopicContext.jsx'
 
 const getTrendIcon = (trend) => {
   switch (trend) {
@@ -164,6 +166,9 @@ function HotSearchPage() {
     }
   }
 
+  
+  // C1: hot topic context setter (跨页面跳转时存激活的 hot topic)
+  const { setActiveHotTopic } = useHotTopic()
   return (
     <PageContainer title="热点搜索" description="发现行业热点，获取创作灵感">
       <div className="search-form">
@@ -321,6 +326,72 @@ function HotSearchPage() {
                       ⏰ {formatTime(topic.published_at)}
                     </span>
                   )}
+                </div>
+
+                {/* C1: 跨需求跳转按钮 — 热点卡 → 生成口播文案 / 拍摄脚本 */}
+                <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveHotTopic({
+                        id: topic.id,
+                        title: topic.title,
+                        source: topic.source,
+                        summary: topic.summary || '',
+                        url: topic.url || '',
+                      })
+                      window.dispatchEvent(new CustomEvent('tab-change-with-data', {
+                        detail: { tab: ROUTE_PATHS.COPYWRITING }
+                      }))
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--primary)'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = 'var(--primary)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
+                  >
+                    🎤 去生成口播文案
+                  </button>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation()
+                      setActiveHotTopic({
+                        id: topic.id,
+                        title: topic.title,
+                        source: topic.source,
+                        summary: topic.summary || '',
+                        url: topic.url || '',
+                      })
+                      window.dispatchEvent(new CustomEvent('tab-change-with-data', {
+                        detail: { tab: ROUTE_PATHS.SHOOT_SCRIPT }
+                      }))
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: '6px 10px',
+                      fontSize: '12px',
+                      fontWeight: '500',
+                      border: '1px solid var(--border-color)',
+                      borderRadius: '6px',
+                      background: 'var(--bg-secondary)',
+                      color: 'var(--text-primary)',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                    onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--accent-primary)'; e.currentTarget.style.color = 'white'; e.currentTarget.style.borderColor = 'var(--accent-primary)' }}
+                    onMouseLeave={(e) => { e.currentTarget.style.background = 'var(--bg-secondary)'; e.currentTarget.style.color = 'var(--text-primary)'; e.currentTarget.style.borderColor = 'var(--border-color)' }}
+                  >
+                    🎬 去生成拍摄脚本
+                  </button>
                 </div>
 
                 {expandedTopics.has(topic.title) && (

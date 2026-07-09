@@ -77,16 +77,23 @@ class WhisperLocalEngine(TranscribeEngine):
 
         Args:
             audio_path: 音频文件路径
-            **kwargs: 其他参数
+            **kwargs:
+                model: 模型名
+                language: 语言代码
+                word_timestamps: bool, 是否返回逐字时间戳（用于剪辑场景）
 
         Returns:
-            转写结果
+            转写结果：
+            - transcript: 完整文本
+            - timestamps: 段级时间戳 [{"time": "00:00", "text": "xxx"}]
+            - word_timestamps: 逐字时间戳（可选）[[word, start, end], ...]
         """
         if not self.is_available:
             raise RuntimeError("Whisper engine not available")
 
         model = kwargs.get("model", self.model_name)
         language = kwargs.get("language", self.language)
+        want_word_timestamps = kwargs.get("word_timestamps", False)
 
         try:
             from backend.utils.whisper_compat import patch as _patch_whisper_compat
@@ -110,6 +117,9 @@ class WhisperLocalEngine(TranscribeEngine):
                 transcribe_kwargs["initial_prompt"] = "以下是普通话的句子，请输出带标点符号的简体中文。"
                 transcribe_kwargs["condition_on_previous_text"] = False
 
+            if want_word_timestamps:
+                transcribe_kwargs["word_timestamps"] = True
+
             result = whisper_model.transcribe(audio_path, **transcribe_kwargs)
 
             # 解析结果
@@ -117,16 +127,28 @@ class WhisperLocalEngine(TranscribeEngine):
             segments = result.get("segments", [])
 
             timestamps = []
+            word_timestamps_list = []
             for segment in segments:
                 start_time = self._format_timestamp(segment.get("start", 0))
                 timestamps.append({
                     "time": start_time,
                     "text": segment.get("text", "").strip()
                 })
+                if want_word_timestamps:
+                    for word in segment.get("words", []) or []:
+                        w = word.get("word", "").strip()
+                        if not w:
+                            continue
+                        ws = word.get("start")
+                        we = word.get("end")
+                        if ws is None or we is None:
+                            continue
+                        word_timestamps_list.append([w, float(ws), float(we)])
 
             return {
                 "transcript": transcript.strip(),
-                "timestamps": timestamps
+                "timestamps": timestamps,
+                "word_timestamps": word_timestamps_list if want_word_timestamps else None,
             }
 
         except Exception as e:

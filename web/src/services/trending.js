@@ -9,7 +9,7 @@ export const trendingService = {
       method: 'POST',
       body: JSON.stringify({
         keyword,
-        platforms: options.platforms || ['baidu', 'weibo', 'zhihu', 'douyin', 'xiaohongshu'],
+        platforms: options.platforms || ['baidu', 'toutiao'],
         days: options.days || 7,
       }),
     }).then(result => result.data)

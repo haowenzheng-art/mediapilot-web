@@ -20,7 +20,6 @@ class AuthService:
         "rewrite_transcript": 5,
         "generate_outline": 3,
         "search_trending": 2,
-        "search_competitors": 2,
         "transcribe_audio": 10,
         "transcribe_video": 10,
     }

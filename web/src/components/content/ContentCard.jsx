@@ -127,6 +127,40 @@ function ContentCard({ content, onViewDetail, onEdit, onDelete }) {
         </div>
       )}
 
+      {/* C1: 显示来源热点（hot_topic_id + title + source）—— 跨需求追踪 */}
+      {content.hot_topic_id && (
+        <div
+          title={content.hot_topic_title || content.hot_topic_id}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '4px',
+            padding: '4px 8px',
+            marginBottom: '8px',
+            background: 'linear-gradient(135deg, rgba(255,107,107,0.08) 0%, rgba(255,107,107,0.03) 100%)',
+            borderLeft: '2px solid #ff6b6b',
+            borderRadius: '4px',
+            fontSize: '11px',
+            color: 'var(--text-secondary)',
+          }}
+        >
+          <span style={{ color: '#ff6b6b' }}>🔥</span>
+          <span style={{
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flex: 1,
+          }}>
+            {content.hot_topic_title || content.hot_topic_id}
+          </span>
+          {content.hot_topic_source && (
+            <span style={{ color: 'var(--text-tertiary)', fontSize: '10px', flexShrink: 0 }}>
+              · {content.hot_topic_source}
+            </span>
+          )}
+        </div>
+      )}
+
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',

@@ -23,12 +23,12 @@ async def _fetch_hotspots_for_subscription(topic: str) -> List[Dict[str, Any]]:
     Returns:
         热点数据列表
     """
-    from backend.services.trending_service_typed import TrendingService
+    from backend.services.trending_service import TrendingService
     trending_service = TrendingService()
 
     result = await trending_service.search(
         keyword=topic,
-        platforms=['baidu', 'weibo', 'zhihu', 'douyin', 'xiaohongshu'],
+        platforms=['baidu', 'toutiao'],  # v4 精简：下线的 4 源不在推送里
         days=1
     )
 

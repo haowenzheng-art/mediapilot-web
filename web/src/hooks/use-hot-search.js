@@ -6,15 +6,12 @@ import { useApp, HISTORY_TYPES } from '../contexts/AppContext'
 
 const PLATFORMS_LIST = [
   { id: 'baidu', name: '百度新闻', icon: '📰' },
-  { id: 'weibo', name: '微博热搜', icon: '📱' },
-  { id: 'zhihu', name: '知乎热榜', icon: '🧠' },
-  { id: 'douyin', name: '抖音热榜', icon: '🎵' },
-  { id: 'xiaohongshu', name: '小红书', icon: '📖' },
+  { id: 'toutiao', name: '今日头条', icon: '📝' },
 ]
 
 export function useHotSearch() {
   const [keyword, setKeyword] = useState('')
-  const [platforms, setPlatforms] = useState(['baidu', 'weibo', 'zhihu', 'douyin', 'xiaohongshu'])
+  const [platforms, setPlatforms] = useState(['baidu', 'toutiao'])
   const [days, setDays] = useState(7)
   const { data, loading, error, run } = useRequest(trendingService.search)
   const { addHistory } = useApp()

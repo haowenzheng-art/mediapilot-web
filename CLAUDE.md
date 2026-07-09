@@ -38,7 +38,7 @@
 
 ---
 
-## Phase 2 开发计划（待开始）
+## Phase 2 开发计划（#6/#8 已完成，#7 待开始）
 
 ### 总览
 
@@ -52,7 +52,7 @@
 |---|------|--------|--------|------|
 | 6 | 音视频转写 | P1 | 14 | ✅已完成 |
 | 7 | 数字人视频生成 | P2 | 14 | 待开始 |
-| 8 | 视频剪辑 | P2 | 15 | 待开始 |
+| 8 | 视频剪辑 | P2 | 15 | ✅已完成 |
 
 ---
 
@@ -117,6 +117,50 @@
 
 ---
 
+## 已完成任务：需求 6 - 音视频转写 ✅
+
+### 功能说明
+
+用户上传音视频文件 → 后台异步转写 → 轮询任务状态 → 拿到逐字稿 + 大纲。文件走 Whisper 本地/火山引擎转写，实时模式走浏览器 SpeechRecognition。前端页 `TranscriptionPage.jsx` 接入真实 API（upload + 轮询）替换了原来的 mock。
+
+### 端点
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| POST | `/api/v1/media/upload` | 上传音视频 → 返回 task_id |
+| GET | `/api/v1/media/task/{task_id}` | 轮询任务状态/结果 |
+| GET | `/api/v1/media/health` | 健康检查 |
+
+### 配额
+
+- `transcribe_video` = 10 / 次
+
+### 任务清单
+
+| ID | 任务 | 负责人 | 状态 |
+|----|------|--------|------|
+| BE-036 | 设计转写任务数据模型 | 后端 | ✅已完成 |
+| BE-037 | 实现上传 + 异步转写 | 后端 | ✅已完成 |
+| BE-038 | 实现转写引擎（Whisper / 火山） | 后端 | ✅已完成 |
+| BE-039 | 实现配额扣减 | 后端 | ✅已完成 |
+| FE-027 | 设计转写页面 | 前端 | ✅已完成 |
+| FE-028 | 实现文件上传 + 轮询 | 前端 | ✅已完成 |
+| FE-029 | 实现结果展示（时间戳/大纲） | 前端 | ✅已完成 |
+| FE-030 | 实时转写（SpeechRecognition） | 前端 | ✅已完成 |
+| QA-017 | 单元测试（转写逻辑） | 测试 | ✅已完成 |
+| QA-018 | e2e 测试（完整流程） | 测试 | ✅已完成 |
+
+### 测试覆盖
+
+- `backend/tests/unit/test_video_edit_service.py` — 共用 service 测试
+- `backend/tests/e2e/test_media_flow.py` — 7 cases，覆盖：上传返 task_id、轮询、404、401、配额扣减
+
+### 过程中修复的 Bug
+
+1. **conftest 的 db_session 没重定向到测试内存引擎**：后台异步任务自建 session 写向生产库，TestClient 内存库永远读不到任务结果。修复：把 `media_service.SessionLocal` 重定向到测试引擎，媒体集成测试改轮询后现可确定性完成
+
+---
+
 ## 已完成任务：需求 5 - 内容关联与追踪 ✅
 
 ### 功能说明
@@ -170,6 +214,57 @@
 2. **DELETE / process 找不到内容时返 400 而非 404**：服务层抛 `ValueError("内容不存在")`，API 笼统映射成 400 INVALID_INPUT。修复：API 检查 message 区分"不存在"→404、"无权"→403、其余→400
 3. **PersonaRepository 同秒排序不确定**：SQLite datetime 默认秒级精度，4 个操作同秒完成时 `last_used_at` 全相等，排序靠 id 兜底，LRU 顺序错乱。修复：`order_by` 加 `desc(id)` 二级排序
 4. **测试债**：`test_content_tracking.py` 三处脱节——import 路径错（`content_repo` → `content_library_repo`）、参数名错（`content_id=` → `content_uuid=`）、方法名不存在（`get_by_topic_id` → `get_topic_trends`）
+
+---
+
+## 已完成任务：需求 8 - 视频剪辑 ✅
+
+### 功能说明
+
+用户上传口播视频 → 后台异步转写 + LLM 智能识别磕巴片段 → FFmpeg 剪切 → 输出干净视频 + 字幕。LLM 智能判断哪些是无效片段（不会粗暴删"然后/这个"），分 3 档强度（轻柔/标准/强力）。
+
+### 端点
+
+| 方法 | 路径 | 用途 |
+|------|------|------|
+| POST | `/api/v1/media/video-edit/upload` | 上传视频 + 剪辑配置（强度） → 返 task_id |
+| GET | `/api/v1/media/video-edit/task/{task_id}` | 轮询任务状态 |
+| GET | `/api/v1/media/video-edit/{task_id}/segments` | 片段详情（保留/删除列表） |
+| GET | `/api/v1/media/video-edit/{task_id}/download/{video\|subtitle}` | 下载原画质 |
+| GET | `/api/v1/media/video-edit/{task_id}/preview` | 360p 预览（先看再下） |
+
+### 配额
+
+- `video_edit` = 15 / 分钟视频
+
+### 任务清单
+
+| ID | 任务 | 负责人 | 状态 |
+|----|------|--------|------|
+| BE-040 | 设计视频剪辑数据模型（VideoEditTaskTable） | 后端 | ✅已完成 |
+| BE-041 | 实现上传 + 异步处理（转写 + LLM 判断） | 后端 | ✅已完成 |
+| BE-042 | 实现 LLM 智能判断（句级/词级双轨） | 后端 | ✅已完成 |
+| BE-043 | 实现 FFmpeg 剪切 + 预览 + 字幕生成 | 后端 | ✅已完成 |
+| BE-044 | 实现下载（视频/字幕） | 后端 | ✅已完成 |
+| BE-045 | 实现配额扣减（按分钟） | 后端 | ✅已完成 |
+| FE-031 | 设计 AI 剪辑页面 | 前端 | ✅已完成 |
+| FE-032 | 实现上传 + 进度条 + 3档强度 | 前端 | ✅已完成 |
+| FE-033 | 实现预览播放器 + 时间轴可视化 | 前端 | ✅已完成 |
+| FE-034 | 实现统计卡片 + 删除片段列表 | 前端 | ✅已完成 |
+| FE-035 | 实现下载（视频/字幕） | 前端 | ✅已完成 |
+| QA-019 | 单元测试（剪辑服务逻辑） | 测试 | ✅已完成 |
+| QA-020 | e2e 测试（完整流程 + 用户隔离） | 测试 | ✅已完成 |
+| QA-021 | 跨模块集成（与转写/AI 复用） | 测试 | ✅已完成 |
+
+### 测试覆盖
+
+- `backend/tests/unit/test_video_edit_service.py` — 16 cases，覆盖配置/转写/检测/FFmpeg 全链路
+- `backend/tests/e2e/test_video_edit_flow.py` — 16 cases，覆盖：上传、轮询、片段、下载、预览、配额、404、用户隔离
+
+### 过程中修复的 Bug
+
+1. **同步 session 写向生产库**：同 #6 修复点
+2. **AI 不可用时回退"假数据"**：违规"数据真实性原则"，已修
 
 ---
 
@@ -327,6 +422,21 @@
 
 ## 更新日志
 
+### 2026-07-09
+- **CLAUDE.md 同步**：Phase 2 进度表 #6/#8 标 ✅已完成的真实状态（之前误标"待开始"），补 #6 音视频转写（14 任务 + 3 端点 + 7 e2e cases）、#8 视频剪辑（15 任务 + 5 端点 + 16 unit + 16 e2e cases）两个完整"已完成任务"段落。数字人 #7 保持"待开始"
+- **BCDEF 进度（2026-07-09 校准）**：F ✅ / **D ✅** / **C1 ✅** 已完成；剩 B（视频剪辑补全：历史任务 + 分段精细调整）待启动，C2/E 留到下次
+  - **D 完成**：AI 假数据兜底全栈清理 — `MediaProcessor.transcribe_audio` / `video_edit_service._transcribe_with_words` 不再隐式降级 mock 假数据，transcribe_engine 不可用直接 raise RuntimeError；copywriting / shoot_script / rewrite 三处 prompt 加口语化硬约束（短句 ≤25 字、禁用 AI 开场套话、结尾强引导代替"记得点赞关注"）；`video_service.get_transcript` docstring 同步
+  - **C1 完成**：跨需求热点→生成链路全打通 — 后端 `hot_topic_id` 入参（copywriting/shoot_script/video-edit）；前端 `HotTopicContext` + Provider + 热点卡"去生成口播文案/去生成拍摄脚本"两个按钮 + CopywritingPage/ShootScriptPage 自动填 + ContentCard 显示来源热点
+- **P0 真 bug 修复**：百度时间窗过滤 `days` 参数之前形同虚设（`_parse_source_time` 死实现永远返 None，days=7 和 days=30 拿一样的结果）。重写 `baidu_news.py` 改用 s-data JSON 里的 `dispTime`（"X小时前"/"X天前"/绝对日期），按 `now - days` 真正过滤。单元测 11 个 case 全过；真服务冒烟 4 个 days 都拿到 9 条 2026-07-09 当天真新闻
+- **死代码清理 — 60s 端点及失败检测**（7 文件）：删 `backend/scrapers/sixtys.py`；`platform_api.py` 删 `SIXTYS_ENDPOINTS` / `SIXTYS_*_THRESHOLD` / `_record_sixty_*` / `_should_fast_fail_sixtys` / `_fetch_baidu_boost` 全套（v3 60s 加重逻辑已无意义）；`trending_service.py` 删 8/2 配额（依赖 60s 失败检测）；`subscription_scheduler_service` import 从 `trending_service_typed` 改回 `trending_service`
+- **死代码清理 — 模板假数据兜底**（2 文件）：删 `backend/services/trending_service_typed.py` 和 `backend/services/mock_data_typed.py`（孤儿 typed 变体）；`trending_service.py` 删 `MockDataService` 引用；`video_service.get_transcript` 失败不再回退"大家好今天给大家分享..."假逐字稿，改成 `raise RuntimeError` 如实上报；删 `backend/services/mock_data.py`（最后没引用了）
+- **死代码清理 — 对标账号全栈下线**（12 文件）：删 `backend/api/competitors.py` / `backend/services/competitor_service.py` / `backend/repository/competitor_repo.py` / `backend/models/domain/competitor.py` / `backend/tests/e2e/test_competitors_flow.py`；改 api 注册、repository/domain/schemas import、`QUOTA_COSTS` 删 `search_competitors`、`RATE_LIMITS` 删 `api_v1_competitors_search`、`excel_exporter` 删 `export_competitors`、`import_export_service` 删 `export_competitors`、`product_kb.yaml` 删 competitors FAQ、测试断言清理；前端 `web/src/index.css` 删 284 行 `.competitor-*` 样式 + 死 `.account-signature`、`HistoryContext.jsx` 删 `COMPETITORS` 常量
+- **测试债清理**（4 文件）：`test_platform_api.py` 删 `TestCompetitorAPI` 6 个 case + `manager.get_competitor_api` 断言；`test_e2e_core_modules.py` 删 `TestCompetitorsModule` 3 个 case；`test_import_export_service.py` 删 `test_export_competitors_*` 2 个 case；`test_auth_service.py` 删 `search_competitors` 配额断言；`test_trending_service.py` 改名 `test_search_empty_keyword_returns_empty` + 修正断言（`len == 0` 而非"返回 mock"）；`test_trending_flow.py` `TestTrendingV3Fields` 改名 `TestTrendingResponseFields`，"60s"语义改"source"，断言 `sixty_failed_platforms == []`（v4 起固定空）
+- **临时文件清理**：9 个 `backend/probe_baidu_*.py` + 1 个 `probe_out.txt`
+- **验证**：全套 pytest 433 passed / 4 skipped / 0 failed（6:25，对比上次 435 减 8 是预期的 6+2 个 competitor case 删除）；真服务 2 源冒烟——百度 9 条 + 头条 7 条都是 2026-07-09 当天真新闻；旧 `/api/v1/competitors/*` 返 404
+- **保留字段**：`TrendingSearchResponse.sixty_failed_platforms` schema 字段保留（前端 `HotSearchPage.jsx` 兼容），内部固定返空列表
+- ⚠️ 遗留：`CLAUDE.md` 进度表（Phase 1 任务 ID 7 / 8）状态字段此前已 ✅，本次未动；mock 字段起什么作用死原则（数据真实性原则文档化于 §"数据真实性原则"）已落到代码注释
+
 ### 2026-07-08
 - 清 v3 测试老债：12 个 fail → 0（全量 455 passed / 4 skip，另有 1 个 live-AI flaky 见下）
 - P0 真 bug 修复：`copywriting_service.get_copywriting` 缺 `def` 函数头的孤儿代码补全 —— 前端「再改改」改写此前直接 500，现恢复
@@ -336,7 +446,7 @@
 - `test_calendar_service` 修复：`create_event` 测试补 `db.flush()` 回填 id/created_at 的打桩（原 mock_event 是摆设，未被 service 使用）
 - 测试基建修复：`conftest.db_setup` 把 `media_service.SessionLocal` 重定向到测试内存引擎 —— 后台异步任务此前自建 session 写向生产库，导致 TestClient 内存库永远读不到任务结果；media 集成测试改轮询后现可确定性完成
 - ⚠️ 遗留 flaky：`test_copywriting_flow.py::test_rewrite_each_direction[more_colloquial]` 依赖真实 AI 返回可解析非空 content，偶发空返回致断言失败（复跑即过）。非本次改动引入，待决定是否 mock AI 固定化
-- ⚠️ 待清理：`CompetitorAPI` / `_mock_competitors`（对标账号）功能已在 2026-05-14 标记清理，但类+mock+测试仍在，属同类死 mock 债
+- ✅ 已清（2026-07-09）：`CompetitorAPI` / `_mock_competitors`（对标账号）全栈下线——路由/service/repo/domain/测试/前端样式/Schema 全部删除
 
 ### 2026-06-20
 - 完成需求 6：音视频转写（前端接入真实 `/api/v1/media/upload` + 轮询 `/media/task/{id}`，替换 mock）

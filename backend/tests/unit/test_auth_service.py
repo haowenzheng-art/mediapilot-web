@@ -364,6 +364,5 @@ class TestAuthService:
         assert auth_service.QUOTA_COSTS["rewrite_transcript"] == 5
         assert auth_service.QUOTA_COSTS["generate_outline"] == 3
         assert auth_service.QUOTA_COSTS["search_trending"] == 2
-        assert auth_service.QUOTA_COSTS["search_competitors"] == 2
         assert auth_service.QUOTA_COSTS["transcribe_audio"] == 10
         assert auth_service.QUOTA_COSTS["transcribe_video"] == 10

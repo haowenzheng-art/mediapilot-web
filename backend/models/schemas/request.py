@@ -17,7 +17,8 @@ class AIProvider(str, Enum):
 class Platform(str, Enum):
     """社交平台"""
     BAIDU = "baidu"              # 百度新闻
-    WEIBO = "weibo"              # 微博热搜
+    TOUTIAO = "toutiao"          # 今日头条（v4 新增，热点搜索源）
+    WEIBO = "weibo"              # 微博热搜（保留枚举：兼容历史数据 + 拍摄脚本等其它域）
     ZHIHU = "zhihu"              # 知乎热榜
     DOUYIN = "douyin"            # 抖音热榜
     XIAOHONGSHU = "xiaohongshu"  # 小红书
@@ -37,21 +38,11 @@ class ContentStyle(str, Enum):
 class TrendingSearchRequest(BaseModel):
     """热点搜索请求"""
     keyword: str = Field(..., description="搜索关键词")
+    # v4 精简：热点搜索只支持 baidu + toutiao
     platforms: List[Platform] = Field(
-        default=[Platform.WEIBO, Platform.DOUYIN, Platform.XIAOHONGSHU]
+        default=[Platform.BAIDU, Platform.TOUTIAO]
     )
     days: int = Field(default=7, ge=1, le=30, description="搜索天数")
-
-
-class CompetitorSearchRequest(BaseModel):
-    """对标账号搜索请求"""
-    niche: str = Field(..., description="赛道/领域")
-    platforms: List[Platform] = Field(
-        default=[Platform.DOUYIN, Platform.XIAOHONGSHU]
-    )
-    min_followers: Optional[int] = Field(default=10000, ge=0)
-    max_followers: Optional[int] = Field(default=1000000, ge=0)
-    min_avg_likes: Optional[int] = Field(default=100, ge=0)
 
 
 class VideoFetchRequest(BaseModel):

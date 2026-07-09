@@ -580,8 +580,52 @@ function CopywritingPage() {
     rewrite(direction)
   }
 
+  // C1: 显示来自热点的来源 banner
+  const sourceHotTopic = hotTopic || activeHotTopic
+
   return (
     <PageContainer title="口播文案生成" description="输入人设，AI自动生成口播文案">
+      {/* C1: 来自热点的来源 banner */}
+      {sourceHotTopic && (
+        <div style={{
+          maxWidth: '800px',
+          margin: '0 auto 16px',
+          padding: '10px 16px',
+          background: 'linear-gradient(135deg, rgba(255,107,107,0.08) 0%, rgba(255,107,107,0.03) 100%)',
+          borderLeft: '3px solid #ff6b6b',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <span style={{ fontWeight: '600' }}>🔥 来自热点：</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{sourceHotTopic.title}</span>
+            {sourceHotTopic.source && (
+              <span style={{ color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+                · 来源 {sourceHotTopic.source}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (setHotTopic) setHotTopic(null)
+              clearActiveHotTopic()
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-tertiary)',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0 8px',
+            }}
+            title="清除来源标记"
+          >×</button>
+        </div>
+      )}
       <div style={{ maxWidth: '800px', margin: '0 auto' }}>
         <PersonaInput
           persona={persona}

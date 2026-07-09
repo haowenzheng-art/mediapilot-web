@@ -143,49 +143,6 @@ def test_export_hot_topics_with_object(import_export_service):
     assert "AI,douyin,1000" in result
 
 
-def test_export_competitors_with_dict(import_export_service):
-    """测试导出对标账号（字典格式）"""
-    accounts = [
-        {"account_id": "user1", "nickname": "账号1", "platform": "douyin", "followers": 10000, "avg_likes": 500},
-        {"account_id": "user2", "nickname": "账号2", "platform": "xiaohongshu", "followers": 5000, "avg_likes": 200},
-    ]
-
-    result = import_export_service.export_competitors(accounts, "csv")
-
-    # 检查表头和数据行（service 列名：account_id/nickname/platform/followers/avg_likes）
-    assert "account_id" in result
-    assert "nickname" in result
-    assert "platform" in result
-    assert "followers" in result
-    assert "user1" in result
-    assert "douyin" in result
-    assert "10000" in result
-
-
-def test_export_competitors_with_object(import_export_service):
-    """测试导出对标账号（对象格式）"""
-    class MockAccount:
-        def __init__(self, account_id, nickname, platform, followers, avg_likes):
-            self.account_id = account_id
-            self.nickname = nickname
-            self.platform = platform
-            self.followers = followers
-            self.avg_likes = avg_likes
-
-    accounts = [MockAccount("user1", "账号1", "douyin", 10000, 500)]
-
-    result = import_export_service.export_competitors(accounts, "csv")
-
-    # 检查基本列名和数据（service 列名：account_id/nickname/platform/followers/avg_likes）
-    assert "account_id" in result
-    assert "user1" in result
-    assert "platform" in result
-    assert "followers" in result
-    assert "user1" in result
-    assert "douyin" in result
-    assert "10000" in result
-
-
 @pytest.mark.asyncio
 async def test_import_from_upload_file_csv(import_export_service):
     """测试从上传的文件导入 CSV"""

@@ -12,7 +12,7 @@ class TestTrendingModule:
     def test_search(self, client, auth_headers):
         resp = client.post("/api/v1/trending/search", json={
             "keyword": "AI",
-            "platforms": ["douyin"],
+            "platforms": ["baidu", "toutiao"],  # v4 精简：下线的 4 源不在搜索里
             "days": 7
         }, headers=auth_headers)
         assert resp.status_code == 200
@@ -26,7 +26,7 @@ class TestTrendingModule:
         monkeypatch.setattr(settings, "DEV_MODE", False)
         resp = client.post("/api/v1/trending/search", json={
             "keyword": "AI",
-            "platforms": ["douyin"],
+            "platforms": ["baidu", "toutiao"],
             "days": 7
         })
         assert resp.status_code == 401
@@ -96,32 +96,6 @@ class TestContentModule:
             "transcript": "这是一段测试文案用于改写验证",
             "style": "简洁"
         })
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["success"] is True
-
-
-class TestCompetitorsModule:
-    """对标账号模块"""
-
-    def test_search(self, client, auth_headers):
-        resp = client.post("/api/v1/competitors/search", json={
-            "niche": "美妆博主",
-            "platforms": ["douyin", "xiaohongshu"]
-        }, headers=auth_headers)
-        assert resp.status_code == 200
-        body = resp.json()
-        assert body["success"] is True
-        assert "data" in body
-
-    def test_search_without_auth(self, client):
-        resp = client.post("/api/v1/competitors/search", json={
-            "niche": "美妆博主",
-        })
-        assert resp.status_code == 401
-
-    def test_health(self, client):
-        resp = client.get("/api/v1/competitors/health")
         assert resp.status_code == 200
         body = resp.json()
         assert body["success"] is True

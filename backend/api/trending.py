@@ -136,97 +136,80 @@ async def get_topic_summary(
     current_user: UserTable = Depends(get_current_user),
 ):
     """
-    生成热点话题的AI总结
+    生成热点话题的AI总结（v2 契约）：
 
-    返回热点事件的背景、关键事实、影响分析等内容
+    - AI 不可用 / AI 失败 / AI 返回空 → 503 EXTERNAL_SERVICE_ERROR + 不扣配额 + 不返假数据
+      （遵守 CLAUDE.md「数据真实性原则」—— 没有真实数据就如实降级，绝不用模板拼的假内容糊弄）
+    - AI 成功 → 200 + 扣配额
+    - 输出格式：5 段【】包裹的主题段落，口语化，适合直接改写成口播文案
+      （遵守 CLAUDE.md「AI 内容格式规范」—— 不用 "#" 符号、避免"本文/文章"等套话）
     """
     user = current_user
 
-    # 检查配额
+    # 1) 配额前置检查
     if not auth_service.check_quota(db, user.id, "ai_summary"):
         return error_response(
             code=ErrorCode.RATE_LIMIT_EXCEEDED,
-            message=f"配额不足，当前余额: {user.quota_balance}",
+            message=f"配额不足，当前余额 {user.quota_balance}",
             status_code=status.HTTP_429_TOO_MANY_REQUESTS
         )
 
-    try:
-        prompt = f"""请对以下热点话题进行详细分析介绍，生成适合用于文案创作的内容摘要。
+    # 2) AI 可用性检查：未配置 / 不可用 → 503，不返假数据
+    if not ai_manager.is_available():
+        return error_response(
+            code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            message="AI 服务暂不可用，请稍后再试",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    # 3) prompt：去 # 字符 + 口语化 + 明确"作为口播文案素材"
+    prompt = f"""请基于以下热点话题，写一段适合直接用于口播文案的素材笔记。
 
 【标题】{request.title}
 【来源】{request.source}
-【简介】{request.summary}
-
-请按照以下结构生成（使用markdown格式）：
-
-# {request.title}
-
-## 事件背景
-（简述事件背景和起因）
-
-## 核心事实
-- 事实1
-- 事实2
-- 事实3
-
-## 影响与分析
-（分析事件的影响和意义）
-
-## 观点与争议
-（不同观点和争议点）
-
-## 延伸话题
-（可以延伸讨论的相关话题）
+【原始简介】{request.summary}
 
 要求：
-- 内容客观准确
-- 结构清晰易读
-- 总字数在500-800字之间
-- 避免使用"本文""文章"等引用词
+- 输出 5 个段落，每段以【】包裹的主题词开头（如【背景】【核心事实】【影响】【观点】【延伸】）
+- 每段 2-3 句，口语化，读者能直接拿来改写成口播文案
+- 不要用 "#" 符号（任何井号开头都不行）
+- 不要分点列示（不要写 "- " "1." 等枚举符）
+- 不要用"本文""文章""综上所述""值得注意的是"等套话
+- 控制在 500-700 字
+- 客观准确，避免主观评价
 """
 
-        ai_content = ""
-        if ai_manager.is_available():
-            try:
-                ai_content = await ai_manager.generate(prompt, max_tokens=1500)
-            except Exception as e:
-                logger.warning(f"AI生成失败: {e}")
-
-        if not ai_content:
-            # 回退到基础摘要
-            ai_content = f"""# {request.title}
-
-## 事件简介
-{request.summary}
-
-## 来源信息
-- 来源: {request.source}
-- 原文链接: {request.url}
-
-## 延伸思考
-这是一个值得关注的热点话题，建议进一步了解相关背景信息。
-"""
-
-        # 扣减配额
-        auth_service.deduct_quota(db, user.id, "ai_summary")
-
-        return success_response(
-            data={
-                "summary": ai_content,
-                "title": request.title,
-                "source": request.source,
-                "url": request.url
-            },
-            message="生成总结成功"
-        )
-
+    # 4) 调 AI；失败/空 都返 503，绝不返假数据兜底
+    try:
+        ai_content = await ai_manager.generate(prompt, max_tokens=1500)
     except Exception as e:
-        logger.error(f"生成总结失败: {e}")
+        logger.warning(f"AI 总结失败: {e}")
         return error_response(
             code=ErrorCode.EXTERNAL_SERVICE_ERROR,
-            message=f"生成总结失败: {str(e)}",
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR
+            message=f"AI 总结失败：{str(e)}",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
         )
+
+    if not ai_content or not ai_content.strip():
+        logger.warning("AI 总结返回为空")
+        return error_response(
+            code=ErrorCode.EXTERNAL_SERVICE_ERROR,
+            message="AI 总结返回为空，请重试",
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE
+        )
+
+    # 5) 成功后扣配额（失败路径已在 4 步 return，不再走到这里）
+    auth_service.deduct_quota(db, user.id, "ai_summary")
+
+    return success_response(
+        data={
+            "summary": ai_content,
+            "title": request.title,
+            "source": request.source,
+            "url": request.url
+        },
+        message="生成总结成功"
+    )
 
 
 @router.post("/article/content")
@@ -243,37 +226,13 @@ async def get_article_content(request: ArticleContentRequest):
     try:
         content = ""
 
-        if request.source == "百度新闻" or request.source == "百度热搜":
+        if request.source in ("百度新闻", "百度热搜", "今日头条"):
             from backend.scrapers.baidu_news import BaiduNewsScraper
             scraper = BaiduNewsScraper()
             content = await scraper.get_article_content(request.url)
             await scraper.close()
-        elif request.source == "微博热搜":
-            from backend.scrapers.weibo import WeiboScraper
-            scraper = WeiboScraper()
-            # 微博内容获取需要登录，这里返回链接
-            content = f"请前往原链接查看完整内容：{request.url}"
-            await scraper.close()
-        elif request.source == "知乎热榜":
-            from backend.scrapers.zhihu import ZhihuScraper
-            scraper = ZhihuScraper()
-            # 知乎内容获取需要登录，这里返回链接
-            content = f"请前往原链接查看完整内容：{request.url}"
-            await scraper.close()
-        elif request.source == "抖音热榜":
-            from backend.scrapers.douyin import DouyinScraper
-            scraper = DouyinScraper()
-            # 抖音内容获取需要特殊处理，这里返回链接
-            content = f"请前往原链接查看完整内容：{request.url}"
-            await scraper.close()
-        elif request.source == "小红书":
-            from backend.scrapers.xiaohongshu import XiaohongshuScraper
-            scraper = XiaohongshuScraper()
-            # 小红书内容获取需要登录，这里返回链接
-            content = f"请前往原链接查看完整内容：{request.url}"
-            await scraper.close()
         else:
-            # 默认返回链接
+            # v4 精简：不再为下线的微博/知乎/抖音/小红书 走专门爬虫分支
             content = f"请前往原链接查看完整内容：{request.url}"
 
         return success_response(
@@ -303,7 +262,8 @@ async def export_trending(
     """
     try:
         # 执行搜索（不扣减配额）
-        platforms = ["douyin", "weibo", "xiaohongshu"]
+        # v4 精简：导出默认走 baidu + toutiao
+        platforms = ["baidu", "toutiao"]
         result = await trending_service.search(
             keyword=keyword,
             platforms=platforms,
@@ -342,19 +302,16 @@ async def export_trending(
 @router.get("/platforms")
 async def get_supported_platforms():
     """
-    获取支持的平台列表
+    获取支持的平台列�?
     """
     return success_response(
         data={
             "platforms": [
                 {"value": "baidu", "name": "百度新闻", "enabled": True},
-                {"value": "weibo", "name": "微博热搜", "enabled": True},
-                {"value": "zhihu", "name": "知乎热榜", "enabled": True},
-                {"value": "douyin", "name": "抖音热榜", "enabled": True},
-                {"value": "xiaohongshu", "name": "小红书", "enabled": True},
+                {"value": "toutiao", "name": "今日头条", "enabled": True},
             ]
         },
-        message="获取支持的平台列表"
+        message="获取支持的平台列�?"
     )
 
 

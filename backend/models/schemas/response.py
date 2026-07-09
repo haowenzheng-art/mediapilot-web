@@ -71,20 +71,6 @@ class HotTopicResponse(BaseModel):
     class Config:
         populate_by_name = True  # 允许使用 url 作为 source_url 的别名
 
-class CompetitorAccountResponse(BaseModel):
-    """对标账号响应"""
-    account_id: str
-    nickname: str
-    platform: str
-    followers: int
-    total_likes: int
-    video_count: int
-    avg_likes: float
-    avg_comments: float = 0.0
-    profile_url: Optional[str] = None
-    avatar_url: Optional[str] = None
-    signature: Optional[str] = None
-
 class VideoInfo(BaseModel):
     """视频信息"""
     url: str
@@ -130,13 +116,6 @@ class ContentGenerateResponse(BaseModel):
     copywriting: Optional[Copywriting] = Field(default=None, description="文案内容")
     generated_at: datetime = Field(default_factory=datetime.utcnow)
 
-class CompetitorSearchResponse(BaseModel):
-    """对标账号响应"""
-    niche: str
-    total_count: int
-    competitors: List[Any]
-    is_demo: bool = False
-
 
 class TrendingSearchResponse(BaseModel):
     """热点搜索响应"""
@@ -165,6 +144,30 @@ class VideoEditSegment(BaseModel):
     reason: Optional[str] = Field(default=None, description="删除原因（仅删除片段填）")
 
 
+class VideoEditTaskSummary(BaseModel):
+    """视频剪辑任务摘要 — 用于列表展示（不含 kept/removed 完整 segments 数据）
+
+    B1: 之前 list_tasks 端点缺失，跑完一个任务后用户找不到历史。
+    """
+    task_id: str
+    status: str
+    source_video_name: Optional[str] = None
+    strength: Optional[str] = None
+    original_duration: Optional[float] = None
+    final_duration: Optional[float] = None
+    output_video_path: Optional[str] = None
+    preview_video_path: Optional[str] = None
+    subtitle_path: Optional[str] = None
+    subtitle_format: Optional[str] = None
+    error: Optional[str] = None
+    created_at: Optional[str] = None
+    updated_at: Optional[str] = None
+    # C1: 关联的热点（从 edit_config 提取）
+    hot_topic_id: Optional[str] = None
+    hot_topic_title: Optional[str] = None
+    hot_topic_source: Optional[str] = None
+
+
 class VideoEditResponse(BaseModel):
     """视频剪辑任务响应"""
     task_id: str
@@ -189,3 +192,16 @@ class VideoEditSegmentsResponse(BaseModel):
     removed_segments: List[VideoEditSegment]
     total_kept: int
     total_removed: int
+
+
+class VideoEditReapplyRequest(BaseModel):
+    """B3: 视频剪辑 segments 精细调整请求
+
+    用户基于 AI 决策微调 kept_segments 后调用此接口重新生成视频。
+    kept_segments 用 [[start, end], ...] 格式（与 task 表里的字段一致）。
+    """
+    kept_segments: List[List[float]] = Field(
+        ...,
+        description="用户调整后的保留片段列表，每项为 [start, end]（秒）",
+        min_length=1,
+    )

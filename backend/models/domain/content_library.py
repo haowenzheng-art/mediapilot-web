@@ -12,6 +12,7 @@ class ContentType(str, Enum):
     """内容类型"""
     COPYWRITING = "copywriting"
     SHOOT_SCRIPT = "shoot_script"
+    VIDEO_EDIT = "video_edit"  # B2: 视频剪辑产物（干净视频 + 字幕）
 
 
 class ContentCreate(BaseModel):

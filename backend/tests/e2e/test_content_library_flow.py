@@ -318,3 +318,118 @@ class TestCrossRequirementIntegration:
             assert len(contents) >= 1
         finally:
             ai_service.ai_manager.is_available = original
+
+
+class TestCrossRequirementHotTopicLinking:
+    """C1 e2e: 验证 copywriting / shoot_script 真正把 hot_topic_id 写进 content_library。
+
+    之前 hot_topic_id=None 写死 — 内容库反查拿不到这些内容的热点关联。
+    现在 schema 已支持 hot_topic_id/title/source 三个字段，纯粹是 API 层没传。
+    修复后必须能正确传递 + 列表筛选 / 反查都通。
+    """
+
+    def test_copywriting_passes_hot_topic_id_to_content_library(
+        self, client, auth_headers, mock_ai_copywriting
+    ):
+        """生成口播文案（带 hot_topic_id） → 内容库能反查到这个热点。"""
+        # 1) 用 hot_topic_id 生成文案
+        gen_resp = client.post(
+            "/api/v1/copywriting/generate",
+            json={
+                "mode": "from_zero",
+                "persona": "测试人设",
+                "topic": "测试话题",
+                "hot_topic_id": "hot_topic_test_001",
+                "hot_topic_title": "测试热点标题",
+                "hot_topic_source": "百度新闻",
+            },
+            headers=auth_headers,
+        )
+        assert gen_resp.status_code == 200, f"generate failed: {gen_resp.text}"
+        assert gen_resp.json()["success"] is True
+
+        # 2) 内容库列表（按 hot_topic_id 筛选）能拿到这个文案
+        list_resp = client.get(
+            "/api/v1/content-library/contents",
+            params={"hot_topic_id": "hot_topic_test_001"},
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200
+        data = list_resp.json()["data"]
+        contents = data["contents"] if isinstance(data, dict) and "contents" in data else data
+        assert len(contents) >= 1, "应能反查到带 hot_topic_id 的文案"
+        # 校验 hot_topic 元数据已写入
+        first = contents[0]
+        assert first.get("hot_topic_id") == "hot_topic_test_001"
+        assert first.get("hot_topic_title") == "测试热点标题"
+        assert first.get("hot_topic_source") == "百度新闻"
+
+        # 3) 反查 API 也能拿到
+        reverse_resp = client.get(
+            "/api/v1/content-library/hot-topic/hot_topic_test_001/contents",
+            headers=auth_headers,
+        )
+        assert reverse_resp.status_code == 200
+        reverse_data = reverse_resp.json()["data"]
+        reverse_contents = reverse_data["contents"] if isinstance(reverse_data, dict) and "contents" in reverse_data else reverse_data
+        assert len(reverse_contents) >= 1, "反查 API 应能拿到这个文案"
+
+    def test_shoot_script_passes_hot_topic_id_to_content_library(
+        self, client, auth_headers, mock_ai_shoot_script
+    ):
+        """生成拍摄脚本（带 hot_topic_id） → 内容库能反查到这个热点。"""
+        # 1) 用 hot_topic_id 生成脚本
+        gen_resp = client.post(
+            "/api/v1/shoot-script/generate",
+            json={
+                "topic": "测试话题",
+                "platform": "douyin",
+                "style": "energetic",
+                "persona": "测试人设",
+                "hot_topic_id": "hot_topic_test_002",
+                "hot_topic_title": "测试热点标题 2",
+                "hot_topic_source": "微博",
+            },
+            headers=auth_headers,
+        )
+        assert gen_resp.status_code == 200, f"generate failed: {gen_resp.text}"
+        assert gen_resp.json()["success"] is True
+
+        # 2) 反查 API
+        reverse_resp = client.get(
+            "/api/v1/content-library/hot-topic/hot_topic_test_002/contents",
+            headers=auth_headers,
+        )
+        assert reverse_resp.status_code == 200
+        reverse_data = reverse_resp.json()["data"]
+        reverse_contents = reverse_data["contents"] if isinstance(reverse_data, dict) and "contents" in reverse_data else reverse_data
+        assert len(reverse_contents) >= 1, "拍摄脚本应能反查到 hot_topic"
+        first = reverse_contents[0]
+        assert first.get("hot_topic_id") == "hot_topic_test_002"
+        assert first.get("hot_topic_source") == "微博"
+
+    def test_hot_topic_id_optional_does_not_break(
+        self, client, auth_headers, mock_ai_copywriting
+    ):
+        """不传 hot_topic_id 时（旧行为兼容），仍能正常生成 + 入库（hot_topic_id=None）。"""
+        gen_resp = client.post(
+            "/api/v1/copywriting/generate",
+            json={
+                "mode": "from_zero",
+                "persona": "测试人设",
+                "topic": "测试话题",
+                # 不传 hot_topic_id
+            },
+            headers=auth_headers,
+        )
+        assert gen_resp.status_code == 200, f"generate failed: {gen_resp.text}"
+        assert gen_resp.json()["success"] is True
+
+        # 内容库能拿到这个文案，但 hot_topic_id 是 None
+        list_resp = client.get(
+            "/api/v1/content-library/contents",
+            headers=auth_headers,
+        )
+        assert list_resp.status_code == 200
+        # 不强校验具体条数（mock 共享数据库）— 只确认不报错
+        assert "data" in list_resp.json()

@@ -160,9 +160,9 @@ async def generate_copywriting(
                 content_id=result.id,
                 title=result.title,
                 summary=result.content[:200] if len(result.content) > 200 else result.content,
-                hot_topic_id=None,
-                hot_topic_title=None,
-                hot_topic_source=None,
+                hot_topic_id=request.hot_topic_id,  # C1: 真实传入热点关联
+                hot_topic_title=request.hot_topic_title,
+                hot_topic_source=request.hot_topic_source,
                 mode=result.mode,
                 persona=request.persona,
                 platform=None,

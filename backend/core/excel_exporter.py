@@ -20,52 +20,6 @@ class ExcelExporter:
             bottom=Side(style='thin')
         )
 
-    def export_competitors(self, accounts):
-        """导出对标账号到Excel"""
-        wb = openpyxl.Workbook()
-        ws = wb.active
-        ws.title = "对标账号"
-
-        headers = ["账号ID", "昵称", "平台", "粉丝数", "获赞数", "作品数", "平均点赞", "主页链接"]
-
-        # 写入表头
-        for col_num, header in enumerate(headers, 1):
-            cell = ws.cell(row=1, column=col_num, value=header)
-            cell.fill = self.header_fill
-            cell.font = self.header_font
-            cell.alignment = Alignment(horizontal="center", vertical="center")
-            cell.border = self.border
-
-        # 写入数据
-        for row_num, account in enumerate(accounts, 2):
-            ws.cell(row=row_num, column=1, value=account.get("account_id", ""))
-            ws.cell(row=row_num, column=2, value=account.get("nickname", ""))
-            ws.cell(row=row_num, column=3, value=account.get("platform", ""))
-            ws.cell(row=row_num, column=4, value=account.get("followers", 0))
-            ws.cell(row=row_num, column=5, value=account.get("total_likes", 0))
-            ws.cell(row=row_num, column=6, value=account.get("video_count", 0))
-            ws.cell(row=row_num, column=7, value=account.get("avg_likes", 0))
-            ws.cell(row=row_num, column=8, value=account.get("profile_url", ""))
-
-        # 调整列宽
-        for col in ws.columns:
-            max_length = 0
-            column = col[0].column_letter
-            for cell in col:
-                try:
-                    if len(str(cell.value)) > max_length:
-                        max_length = len(str(cell.value))
-                except:
-                    pass
-            adjusted_width = min(max_length + 2, 50)
-            ws.column_dimensions[column].width = adjusted_width
-
-        # 保存到BytesIO
-        output = BytesIO()
-        wb.save(output)
-        output.seek(0)
-        return output
-
     def export_transcript(self, video_title, lines):
         """导出逐字稿到Excel"""
         wb = openpyxl.Workbook()

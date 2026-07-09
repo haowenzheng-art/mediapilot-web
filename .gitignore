@@ -12,6 +12,9 @@ dist/
 .ruff_cache/
 .coverage
 htmlcov/
+# venv — 项目虚拟环境不应入仓（backend/.venv 是开发用）
+backend/.venv/
+.venv/
 
 # ===== Env / Secrets =====
 .env
@@ -64,3 +67,10 @@ Users19802Desktopagent_resp.json
 # ===== Stray shell redirects =====
 /x
 web/x
+
+# ===== Stray debug / probe scripts =====
+backend/debug_*.py
+backend/test_*.py
+!/backend/tests/
+check_users.py
+backend/trending_test_result.json

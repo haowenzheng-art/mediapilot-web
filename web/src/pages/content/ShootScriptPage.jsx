@@ -1,10 +1,11 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useShootScript } from '../../hooks/use-shoot-script'
 import PageContainer from '../../components/common/PageContainer'
 import PlatformSelector from '../../components/content/PlatformSelector'
 import StyleSelector from '../../components/content/StyleSelector'
 import ShotList from '../../components/content/ShotList'
 import { ReasoningToggle } from '../../components/common/ReasoningToggle'
+import { useHotTopic } from '../../contexts/HotTopicContext.jsx'
 
 function StreamingIndicator({ reasoning, reasoningSupported }) {
   // shots 整体性强，仍按完成再渲染；流式阶段只显示思考过程 + 进度提示
@@ -321,7 +322,19 @@ function ShootScriptPage() {
     enableReasoning, setEnableReasoning,
     reasoning, reasoningSupported,
     isStreaming,
+    hotTopic, setHotTopic,  // C1
   } = useShootScript()
+  const { activeHotTopic, clearActiveHotTopic } = useHotTopic()
+
+  // C1: 消费来自 HotSearchPage 的活跃热点
+  useEffect(() => {
+    if (activeHotTopic && !hotTopic) {
+      setHotTopic(activeHotTopic)
+      if (!topic.trim()) {
+        setTopic(activeHotTopic.title)
+      }
+    }
+  }, [activeHotTopic, hotTopic, setHotTopic, setTopic, topic])
 
   const handleExport = (format) => {
     exportScript(format)
@@ -332,8 +345,52 @@ function ShootScriptPage() {
     console.log('Selected shot:', shot)
   }
 
+  // C1: 来自热点的来源 banner
+  const sourceHotTopic = hotTopic || activeHotTopic
+
   return (
     <PageContainer title="拍摄脚本生成" description="AI自动生成分镜头脚本，适配不同平台">
+      {sourceHotTopic && (
+        <div style={{
+          maxWidth: '900px',
+          margin: '0 auto 16px',
+          padding: '10px 16px',
+          background: 'linear-gradient(135deg, rgba(255,107,107,0.08) 0%, rgba(255,107,107,0.03) 100%)',
+          borderLeft: '3px solid #ff6b6b',
+          borderRadius: '6px',
+          fontSize: '13px',
+          color: 'var(--text-primary)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}>
+          <div>
+            <span style={{ fontWeight: '600' }}>🔥 来自热点：</span>
+            <span style={{ color: 'var(--text-secondary)' }}>{sourceHotTopic.title}</span>
+            {sourceHotTopic.source && (
+              <span style={{ color: 'var(--text-tertiary)', marginLeft: '8px' }}>
+                · 来源 {sourceHotTopic.source}
+              </span>
+            )}
+          </div>
+          <button
+            onClick={() => {
+              if (setHotTopic) setHotTopic(null)
+              clearActiveHotTopic()
+            }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--text-tertiary)',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0 8px',
+            }}
+            title="清除来源标记"
+          >×</button>
+        </div>
+      )}
+
       <div style={{ maxWidth: '900px', margin: '0 auto' }}>
         {/* 人设输入 */}
         <div style={{ marginBottom: '24px' }}>

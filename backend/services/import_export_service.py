@@ -209,40 +209,5 @@ class ImportExportService:
         else:
             raise ValueError(f"不支持的导出格式: {format_type}")
 
-    def export_competitors(self, accounts: List[Any], format_type: str = "csv") -> str | bytes:
-        """
-        导出对标账号
-
-        Args:
-            accounts: 对标账号列表（Pydantic 或 dict）
-            format_type: 导出格式（csv/xlsx）
-
-        Returns:
-            文件内容（字符串或字节）
-        """
-        data = []
-        for acc in accounts:
-            if hasattr(acc, 'model_dump'):
-                data.append(acc.model_dump())
-            elif hasattr(acc, 'dict'):
-                data.append(acc.dict())
-            elif isinstance(acc, dict):
-                data.append(acc)
-            else:
-                data.append({
-                    'account_id': getattr(acc, 'account_id', ''),
-                    'nickname': getattr(acc, 'nickname', ''),
-                    'platform': getattr(acc, 'platform', ''),
-                    'followers': getattr(acc, 'followers', 0),
-                    'avg_likes': getattr(acc, 'avg_likes', 0),
-                })
-
-        if format_type == 'csv':
-            return self.export_to_csv(data, "competitors")
-        elif format_type == 'xlsx':
-            return self.export_to_excel(data, "competitors")
-        else:
-            raise ValueError(f"不支持的导出格式: {format_type}")
-
 # 全局导入导出服务实例
 import_export_service = ImportExportService()

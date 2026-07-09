@@ -36,6 +36,8 @@ function readEnableReasoning() {
 
 export function useShootScript() {
   const [topic, setTopic] = useState('')
+  // C1: 跨页面跳转携带的热点元数据（来自 HotTopicContext）
+  const [hotTopic, setHotTopic] = useState(null)
   const [platform, setPlatform] = useState('douyin')
   const [duration, setDuration] = useState(60)
   const [style, setStyle] = useState('energetic')
@@ -53,9 +55,15 @@ export function useShootScript() {
   }, [])
 
   const streamFn = useCallback(
-    (t, p, st, pe, dur, options) =>
-      shootScriptService.generateStream(t, p, st, pe, dur, options),
-    []
+    (t, p, st, pe, dur, options) => {
+      // C1: 携带热点关联（让内容库反查可拿到 hot_topic_id）
+      const mergedOptions = { ...(options || {}) }
+      if (hotTopic) {
+        mergedOptions.hotTopic = hotTopic  // 传给 service，service 拆字段
+      }
+      return shootScriptService.generateStream(t, p, st, pe, dur, mergedOptions)
+    },
+    [hotTopic]
   )
   const {
     reasoning,
@@ -151,6 +159,7 @@ export function useShootScript() {
     duration, setDuration,
     style, setStyle,
     persona, setPersona,
+    hotTopic, setHotTopic,  // C1
     result, setResult,
     loading, error, setError,
     // 流式相关

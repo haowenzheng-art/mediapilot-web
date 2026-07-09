@@ -16,10 +16,10 @@ class TestTrendingService:
         self.service = TrendingService()
 
     async def test_search_normal_returns_topic_list(self):
-        """Test normal search returns topic list"""
+        """Test normal search returns topic list（v4 精简：baidu + toutiao）"""
         result = await self.service.search(
             keyword="AI",
-            platforms=["douyin", "xiaohongshu"],
+            platforms=["baidu", "toutiao"],
             days=7
         )
 
@@ -27,23 +27,24 @@ class TestTrendingService:
         assert result.total_count >= 0
         assert isinstance(result.hot_topics, list)
 
-    async def test_search_empty_keyword_returns_mock_data(self):
-        """Test empty keyword returns mock data"""
+    async def test_search_empty_keyword_returns_empty(self):
+        """Test empty keyword returns empty result list (not mock data)"""
         result = await self.service.search(
             keyword="",
-            platforms=["douyin"],
+            platforms=["baidu"],
             days=1
         )
 
         assert result.keyword == ""
-        # Mock service returns mock data based on keyword
+        # v4 起：不再回退 mock，baidu 空关键词直接返空
         assert isinstance(result.hot_topics, list)
+        assert len(result.hot_topics) == 0
 
     async def test_search_single_platform_returns_data(self):
         """Test single platform returns data"""
         result = await self.service.search(
             keyword="test",
-            platforms=["douyin"],
+            platforms=["baidu"],
             days=7
         )
 
@@ -57,7 +58,7 @@ class TestTrendingService:
         # Minimum days
         result_min = await self.service.search(
             keyword="test",
-            platforms=["douyin"],
+            platforms=["baidu"],
             days=1
         )
         assert result_min.total_count >= 0
@@ -65,7 +66,7 @@ class TestTrendingService:
         # Maximum days
         result_max = await self.service.search(
             keyword="test",
-            platforms=["douyin"],
+            platforms=["baidu"],
             days=30
         )
         assert result_max.total_count >= 0
@@ -84,7 +85,7 @@ class TestTrendingService:
             topics=[{
                 "title": "test 热点",
                 "summary": "关于 test 的摘要",
-                "source": "抖音热榜",
+                "source": "百度新闻",
                 "source_url": "https://example.com/x",
                 "category": "综合",
                 "heat_value": 12345,
@@ -104,7 +105,7 @@ class TestTrendingService:
             new=AsyncMock(return_value=fake)
         ):
             result = await self.service.search(
-                keyword="test", platforms=["douyin"], days=7
+                keyword="test", platforms=["baidu"], days=7
             )
 
         assert result.hot_topics, "mock 数据应产出至少一条热点"
@@ -113,4 +114,4 @@ class TestTrendingService:
         assert hasattr(topic, 'source')
         assert hasattr(topic, 'heat_value')
         assert hasattr(topic, 'trend_direction')
-        assert topic.source == "抖音热榜"
+        assert topic.source == "百度新闻"

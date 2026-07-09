@@ -86,10 +86,3 @@ faqs:
     action_url: /calendar
     action_text: 前往发布日历
 
-  - id: competitors
-    question: 怎么找对标账号
-    keywords: [对标, 同行, 账号, competitor, 标杆]
-    answer: |
-      「对标账号」页输入赛道+平台+粉丝区间，返回符合条件的账号列表（账号名/平台/粉丝/平均点赞/简介）。无第三方 API 时返回 demo 数据，列表会标 "demo" 徽章。
-    action_url: /competitors
-    action_text: 前往对标账号

@@ -14,7 +14,7 @@ class TestTrendingSearchAPI:
         """测试使用关键词搜索热点"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "AI",
-            "platforms": ["douyin", "xiaohongshu"],
+            "platforms": ["baidu", "toutiao"],
             "days": 7
         }, headers=auth_headers)
 
@@ -29,7 +29,7 @@ class TestTrendingSearchAPI:
         """测试空关键词搜索"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "",
-            "platforms": ["weibo"],
+            "platforms": ["baidu"],
             "days": 3
         }, headers=auth_headers)
 
@@ -42,7 +42,7 @@ class TestTrendingSearchAPI:
         """测试单个平台搜索"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "测试",
-            "platforms": ["zhihu"],
+            "platforms": ["toutiao"],
             "days": 7
         }, headers=auth_headers)
 
@@ -54,7 +54,7 @@ class TestTrendingSearchAPI:
         """测试多个平台搜索"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "科技",
-            "platforms": ["douyin", "weibo", "zhihu", "xiaohongshu", "baidu"],
+            "platforms": ["baidu", "toutiao"],
             "days": 7
         }, headers=auth_headers)
 
@@ -68,7 +68,7 @@ class TestTrendingSearchAPI:
         # 最小天数
         response_min = client.post("/api/v1/trending/search", json={
             "keyword": "test",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": 1
         }, headers=auth_headers)
         assert response_min.status_code == 200
@@ -76,7 +76,7 @@ class TestTrendingSearchAPI:
         # 最大天数
         response_max = client.post("/api/v1/trending/search", json={
             "keyword": "test",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": 30
         }, headers=auth_headers)
         assert response_max.status_code == 200
@@ -91,7 +91,7 @@ class TestTrendingSearchAPI:
         # 执行搜索
         search_resp = client.post("/api/v1/trending/search", json={
             "keyword": "配额测试",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": 7
         }, headers=auth_headers)
         assert search_resp.status_code == 200
@@ -122,7 +122,7 @@ class TestTrendingSearchAPI:
                 # 尝试搜索
                 search_resp = client.post("/api/v1/trending/search", json={
                     "keyword": "测试",
-                    "platforms": ["douyin"],
+                    "platforms": ["baidu"],
                     "days": 7
                 }, headers=auth_headers)
                 # 配额不足应该返回错误
@@ -135,7 +135,7 @@ class TestTrendingSearchAPI:
         """测试返回的热点话题结构"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "结构测试",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": 7
         }, headers=auth_headers)
 
@@ -154,7 +154,7 @@ class TestTrendingSearchAPI:
 class TestTrendingSummaryAPI:
     """热点AI总结API测试类"""
 
-    def test_get_topic_summary(self, client, auth_headers):
+    def test_get_topic_summary(self, client, auth_headers, mock_ai_summary):
         """测试生成热点总结"""
         response = client.post("/api/v1/trending/summary", json={
             "title": "AI技术突破",
@@ -169,7 +169,7 @@ class TestTrendingSummaryAPI:
         assert "summary" in data["data"]
         assert data["data"]["title"] == "AI技术突破"
 
-    def test_get_topic_summary_different_sources(self, client, auth_headers):
+    def test_get_topic_summary_different_sources(self, client, auth_headers, mock_ai_summary):
         """测试不同来源的热点总结"""
         sources = ["抖音", "微博", "知乎", "百度新闻", "小红书"]
 
@@ -182,7 +182,7 @@ class TestTrendingSummaryAPI:
             }, headers=auth_headers)
             assert response.status_code == 200
 
-    def test_get_topic_summary_with_long_title(self, client, auth_headers):
+    def test_get_topic_summary_with_long_title(self, client, auth_headers, mock_ai_summary):
         """测试长标题的总结"""
         long_title = "这是一个非常长的标题，用于测试API是否能够正确处理超过预期长度的标题内容，确保系统稳定性"
         response = client.post("/api/v1/trending/summary", json={
@@ -194,7 +194,7 @@ class TestTrendingSummaryAPI:
 
         assert response.status_code == 200
 
-    def test_get_topic_summary_deducts_quota(self, client, auth_headers):
+    def test_get_topic_summary_deducts_quota(self, client, auth_headers, mock_ai_summary):
         """测试总结功能扣减配额"""
         # 获取初始配额
         me_resp = client.get("/api/v1/auth/me")
@@ -216,11 +216,15 @@ class TestTrendingSummaryAPI:
             quota_after = me_after.json()["data"]["quota_balance"]
             assert quota_after < quota_before
 
-    def test_get_topic_summary_markdown_format(self, client, auth_headers):
-        """测试返回的总结是Markdown格式"""
+    def test_get_topic_summary_segmented_format(self, client, auth_headers, mock_ai_summary):
+        """v2: 总结应是 5 段【】包裹的段落格式（不用 # 字符）。
+
+        旧版"Markdown 格式"用 # ## ### — 违反 CLAUDE.md「AI 内容格式规范」第 1 条。
+        新版改用【主题】段落标记（v2 prompt 要求）。
+        """
         response = client.post("/api/v1/trending/summary", json={
-            "title": "Markdown测试",
-            "summary": "测试Markdown格式",
+            "title": "段标记测试",
+            "summary": "测试段标记格式",
             "url": "https://example.com",
             "source": "抖音"
         }, headers=auth_headers)
@@ -228,9 +232,70 @@ class TestTrendingSummaryAPI:
         assert response.status_code == 200
         data = response.json()
         summary = data["data"]["summary"]
-        # 检查是否包含Markdown标记
+        # v2 契约
         assert isinstance(summary, str)
         assert len(summary) > 0
+        assert "【" in summary and "】" in summary, "v2 总结应包含【】段标记"
+        assert "#" not in summary, "v2 总结不应包含 # 字符（违反 AI 内容格式规范）"
+
+
+    # --- v2 总结契约: 503 降级路径（AI 不可用 / AI 失败 / AI 返空） ---
+
+    def test_get_topic_summary_503_when_ai_unavailable(
+        self, client, auth_headers, mock_ai_summary_unavailable
+    ):
+        """AI 服务不可用时 → 503 EXTERNAL_SERVICE_ERROR，不返假数据（数据真实性原则）。"""
+        response = client.post("/api/v1/trending/summary", json={
+            "title": "AI不可用测试",
+            "summary": "测试",
+            "url": "https://example.com",
+            "source": "抖音"
+        }, headers=auth_headers)
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["success"] is False
+        assert "AI" in body["error"]["message"] or "不可用" in body["error"]["message"]
+
+    def test_get_topic_summary_503_when_ai_returns_empty(
+        self, client, auth_headers, mock_ai_summary_empty_response
+    ):
+        """AI 调通但返空 → 503，绝不返假数据兜底。"""
+        response = client.post("/api/v1/trending/summary", json={
+            "title": "AI空返回测试",
+            "summary": "测试",
+            "url": "https://example.com",
+            "source": "抖音"
+        }, headers=auth_headers)
+
+        assert response.status_code == 503
+        body = response.json()
+        assert body["success"] is False
+        assert "空" in body["error"]["message"] or "失败" in body["error"]["message"]
+
+    def test_get_topic_summary_503_does_not_deduct_quota(
+        self, client, auth_headers, mock_ai_summary_unavailable
+    ):
+        """AI 不可用 → 503 时配额不应被扣减（用户没拿到结果，不应收费）。"""
+        # 先取配额
+        me_resp = client.get("/api/v1/auth/me")
+        quota_before = me_resp.json()["data"]["quota_balance"] if me_resp.status_code == 200 else None
+
+        # 触发 503
+        response = client.post("/api/v1/trending/summary", json={
+            "title": "配额保护测试",
+            "summary": "测试",
+            "url": "https://example.com",
+            "source": "抖音"
+        }, headers=auth_headers)
+        assert response.status_code == 503
+
+        if quota_before is not None:
+            me_after = client.get("/api/v1/auth/me")
+            quota_after = me_after.json()["data"]["quota_balance"]
+            assert quota_after == quota_before, (
+                f"503 失败时配额不应扣减: before={quota_before}, after={quota_after}"
+            )
 
 
 class TestArticleContentAPI:
@@ -247,51 +312,6 @@ class TestArticleContentAPI:
         data = response.json()
         assert data["success"] is True
         assert "content" in data["data"]
-
-    def test_get_article_content_weibo(self, client, auth_headers):
-        """测试获取微博文章内容"""
-        response = client.post("/api/v1/trending/article/content", json={
-            "url": "https://weibo.com/test",
-            "source": "微博热搜"
-        }, headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-        # 微博内容需要登录，应该返回链接提示
-
-    def test_get_article_content_zhihu(self, client, auth_headers):
-        """测试获取知乎文章内容"""
-        response = client.post("/api/v1/trending/article/content", json={
-            "url": "https://zhihu.com/question/test",
-            "source": "知乎热榜"
-        }, headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-
-    def test_get_article_content_douyin(self, client, auth_headers):
-        """测试获取抖音文章内容"""
-        response = client.post("/api/v1/trending/article/content", json={
-            "url": "https://douyin.com/video/test",
-            "source": "抖音热榜"
-        }, headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
-
-    def test_get_article_content_xiaohongshu(self, client, auth_headers):
-        """测试获取小红书文章内容"""
-        response = client.post("/api/v1/trending/article/content", json={
-            "url": "https://xiaohongshu.com/explore/test",
-            "source": "小红书"
-        }, headers=auth_headers)
-
-        assert response.status_code == 200
-        data = response.json()
-        assert data["success"] is True
 
     def test_get_article_content_unknown_source(self, client, auth_headers):
         """测试未知来源的文章内容"""
@@ -382,11 +402,14 @@ class TestTrendingPlatformsAPI:
         assert "platforms" in data["data"]
         assert isinstance(data["data"]["platforms"], list)
 
-        # 检查是否包含预期的平台
+        # 检查是否包含预期的平台（v4 精简：只剩 baidu + toutiao）
         platforms = [p["value"] for p in data["data"]["platforms"]]
-        expected_platforms = ["baidu", "weibo", "zhihu", "douyin", "xiaohongshu"]
+        expected_platforms = ["baidu", "toutiao"]
         for expected in expected_platforms:
             assert expected in platforms
+        # 旧 4 源必须下线
+        for removed in ["weibo", "zhihu", "douyin", "xiaohongshu"]:
+            assert removed not in platforms
 
     def test_platform_structure(self, client, auth_headers):
         """测试平台数据结构"""
@@ -412,7 +435,7 @@ class TestTrendingErrorHandling:
         """测试无效的天数参数"""
         response = client.post("/api/v1/trending/search", json={
             "keyword": "测试",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": -1
         }, headers=auth_headers)
 
@@ -459,7 +482,7 @@ class TestTrendingIntegration:
         # 1. 搜索热点
         search_resp = client.post("/api/v1/trending/search", json={
             "keyword": "集成测试",
-            "platforms": ["douyin"],
+            "platforms": ["baidu"],
             "days": 7
         }, headers=auth_headers)
         assert search_resp.status_code == 200
@@ -487,7 +510,7 @@ class TestTrendingIntegration:
         for i in range(3):
             resp = client.post("/api/v1/trending/search", json={
                 "keyword": f"测试{i}",
-                "platforms": ["douyin"],
+                "platforms": ["baidu"],
                 "days": 7
             }, headers=auth_headers)
             assert resp.status_code == 200
